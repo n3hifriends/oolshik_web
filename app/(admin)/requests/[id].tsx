@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Pressable, Text, View, useWindowDimensions } from "react-native";
+import React, { useRef, useState } from "react";
+import { ActivityIndicator, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { COLORS, STATUS_META } from "@/theme/tokens";
 import { fmtDate, inr, timeAgo } from "@/lib/format";
@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Avatar, Button, Card, Field, Pill, Stars, StatusBadge, UserCell } from "@/components/ui";
 import { Icon } from "@/components/Icon";
 import { RequestMap } from "@/components/RequestMap";
+import { ENV } from "@/lib/env";
 import type { AdminRequestDetail } from "@/api/types";
 
 type RequestField = { label: string; value: string; mono?: boolean };
@@ -36,6 +37,14 @@ function formatRadius(radiusM: number) {
   if (!Number.isFinite(radiusM) || radiusM <= 0) return "Unavailable";
   if (radiusM >= 1000) return `${(radiusM / 1000).toFixed(radiusM % 1000 === 0 ? 0 : 1)} km`;
   return `${Math.round(radiusM)} m`;
+}
+
+function resolveAudioUrl(audioUrl: string) {
+  try {
+    return new URL(audioUrl, ENV.API_BASE_URL).toString();
+  } catch {
+    return audioUrl;
+  }
 }
 
 export default function RequestDetail() {
@@ -133,7 +142,7 @@ export default function RequestDetail() {
           <Card padding={20}>
             <Text style={cardTitle}>Voice request & transcript</Text>
             {req.audioUrl ? (
-              <AudioPlayer transcript={req.transcript} />
+              <AudioPlayer audioUrl={req.audioUrl} transcript={req.transcript} />
             ) : (
               <Text style={{ color: COLORS.text3, fontSize: 14 }}>
                 No audio attached — request was created via text.
@@ -422,25 +431,82 @@ function LocationServiceSection({
   );
 }
 
-function AudioPlayer({ transcript }: { transcript: string | null }) {
+function AudioPlayer({ audioUrl, transcript }: { audioUrl: string; transcript: string | null }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const audioRef = useRef<any>(null);
+  const [loadStatus, setLoadStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [playing, setPlaying] = useState(false);
-  const [prog, setProg] = useState(0);
+  const [posMs, setPosMs] = useState(0);
+  const [durMs, setDurMs] = useState(0);
 
   React.useEffect(() => {
-    if (!playing) return;
-    const t = setInterval(
-      () =>
-        setProg((p) => {
-          if (p >= 100) {
-            setPlaying(false);
-            return 0;
-          }
-          return p + 2;
-        }),
-      60
-    );
-    return () => clearInterval(t);
-  }, [playing]);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
+    setLoadStatus("idle");
+    setPlaying(false);
+    setPosMs(0);
+    setDurMs(0);
+  }, [audioUrl]);
+
+  React.useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  function attachListeners(audio: HTMLAudioElement) {
+    audio.addEventListener("loadedmetadata", () => setDurMs(audio.duration * 1000));
+    audio.addEventListener("timeupdate", () => setPosMs(audio.currentTime * 1000));
+    audio.addEventListener("playing", () => {
+      setLoadStatus("ready");
+      setPlaying(true);
+    });
+    audio.addEventListener("pause", () => setPlaying(false));
+    audio.addEventListener("ended", () => {
+      setPlaying(false);
+      setPosMs(0);
+      audio.currentTime = 0;
+    });
+    audio.addEventListener("error", () => {
+      setLoadStatus("error");
+      setPlaying(false);
+    });
+  }
+
+  function toggle() {
+    if (audioRef.current) {
+      if (playing) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play().catch(() => setLoadStatus("error"));
+      }
+      return;
+    }
+    if (typeof document === "undefined") return;
+    setLoadStatus("loading");
+    const audio = document.createElement("audio") as HTMLAudioElement;
+    audio.src = resolveAudioUrl(audioUrl);
+    audioRef.current = audio;
+    attachListeners(audio);
+    audio.play().catch(() => {
+      setLoadStatus("error");
+      setPlaying(false);
+    });
+  }
+
+  const fmtMs = (ms: number) => {
+    const s = Math.floor(ms / 1000);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  };
+
+  const prog = durMs > 0 ? Math.max(0, Math.min(100, (posMs / durMs) * 100)) : 0;
 
   return (
     <View>
@@ -457,7 +523,7 @@ function AudioPlayer({ transcript }: { transcript: string | null }) {
         }}
       >
         <Pressable
-          onPress={() => setPlaying((p) => !p)}
+          onPress={toggle}
           style={{
             width: 40,
             height: 40,
@@ -467,7 +533,9 @@ function AudioPlayer({ transcript }: { transcript: string | null }) {
             justifyContent: "center",
           }}
         >
-          {playing ? (
+          {loadStatus === "loading" ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : playing ? (
             <View style={{ flexDirection: "row", gap: 3 }}>
               <View style={{ width: 4, height: 13, backgroundColor: "#fff", borderRadius: 1 }} />
               <View style={{ width: 4, height: 13, backgroundColor: "#fff", borderRadius: 1 }} />
@@ -496,14 +564,19 @@ function AudioPlayer({ transcript }: { transcript: string | null }) {
           </View>
           <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 6 }}>
             <Text style={{ fontSize: 11.5, color: COLORS.text3, fontFamily: "JetBrains Mono" }}>
-              0:{String(Math.floor(prog * 0.14)).padStart(2, "0")}
+              {fmtMs(posMs)}
             </Text>
             <Text style={{ fontSize: 11.5, color: COLORS.text3, fontFamily: "JetBrains Mono" }}>
-              0:14
+              {durMs > 0 ? fmtMs(durMs) : "--:--"}
             </Text>
           </View>
         </View>
       </View>
+      {loadStatus === "error" && (
+        <Text style={{ color: COLORS.st.red, fontSize: 13, marginTop: 10 }}>
+          Audio could not be loaded. Open the transcription screen to verify the source URL.
+        </Text>
+      )}
       {transcript && (
         <View
           style={{
@@ -533,6 +606,11 @@ function AudioPlayer({ transcript }: { transcript: string | null }) {
             "{transcript}"
           </Text>
         </View>
+      )}
+      {!transcript && (
+        <Text style={{ color: COLORS.text3, fontSize: 13.5, marginTop: 12 }}>
+          Transcript is not available yet. Check the transcription job status for processing details.
+        </Text>
       )}
     </View>
   );
