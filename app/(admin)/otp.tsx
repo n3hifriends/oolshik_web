@@ -31,7 +31,7 @@ export default function OtpAuditScreen() {
             fontSize: 13.5,
           }}
         >
-          {maskPhone(o.phoneNumber)}
+          {o.maskedPhone ?? maskPhone(o.phoneNumber ?? "")}
         </Text>
       ),
     },
@@ -41,7 +41,7 @@ export default function OtpAuditScreen() {
       flex: 1.1,
       render: (o) => (
         <Text style={{ fontFamily: "JetBrains Mono", fontSize: 12.5, color: COLORS.text2 }}>
-          {o.purpose}
+          {o.action ?? o.purpose ?? "—"}
         </Text>
       ),
     },
@@ -58,7 +58,7 @@ export default function OtpAuditScreen() {
       align: "center",
       render: (o) => (
         <Text style={{ fontFamily: "JetBrains Mono", color: COLORS.text, fontSize: 13.5 }}>
-          {o.attempts}
+          {o.attempts ?? "—"}
         </Text>
       ),
     },
@@ -68,7 +68,9 @@ export default function OtpAuditScreen() {
       label: "Attempted at",
       flex: 1.3,
       render: (o) => (
-        <Text style={{ color: COLORS.text2, fontSize: 13 }}>{fmtDate(o.attemptedAt, true)}</Text>
+        <Text style={{ color: COLORS.text2, fontSize: 13 }}>
+          {fmtDate(o.createdAt ?? o.attemptedAt ?? "", true)}
+        </Text>
       ),
     },
   ];

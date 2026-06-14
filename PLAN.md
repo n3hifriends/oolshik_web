@@ -1,358 +1,487 @@
-# Oolshik Admin Portal — Execution Plan
+# Oolshik Admin Portal — Production Live Data Plan
 
-## Legend
+## Goal
 
+Replace the generated mock-data admin portal with a production-grade Expo Web admin console backed by real Spring Boot APIs.
+
+The final app must:
+- authenticate through backend JWT auth
+- require the `ADMIN` role for all admin routes
+- load all dashboard and table data from `/api/admin/**`
+- keep mock data available only for local UI development
+- fail closed if production is accidentally configured to use mocks
+- be type-safe, testable, observable, and deployable as a static web app
+
+---
+
+## Non-Negotiables
+
+- No admin username, password, or API key in `EXPO_PUBLIC_*`.
+- No static `X-Admin-Key` sent from the browser.
+- No generated mock records in production bundles unless explicitly guarded as dev-only.
+- No admin route should render real UI until `/api/auth/me` confirms `ADMIN`.
+- All admin endpoints must be protected by backend authorization, not frontend checks.
+- All list endpoints must use server-side pagination, filtering, and sorting.
+- Every DTO consumed by the frontend must be owned as a backend contract and covered by tests.
+
+---
+
+## Current State
+
+Frontend:
+- Expo Web app with `expo-router`.
+- React Query hooks in `src/hooks/useAdmin.ts`.
+- API switch in `src/api/admin.ts` currently supports `EXPO_PUBLIC_USE_MOCKS`.
+- Mock data exists in `src/api/mock.ts`.
+- JWT auth files exist: `src/api/auth.ts`, `src/api/client.ts`, `src/lib/session.ts`.
+
+Backend:
+- Auth endpoints already exist:
+  - `POST /api/auth/login`
+  - `POST /api/auth/refresh`
+  - `GET /api/auth/me`
+- JWT access tokens authenticate through `JwtAuthFilter`.
+- Roles are mapped to Spring authorities as `ROLE_*`.
+- Admin API package still needs implementation.
+
+---
+
+## Target Architecture
+
+```text
+Browser
+  -> POST /api/auth/login
+  <- { accessToken, refreshToken }
+
+Browser
+  -> GET /api/auth/me with Authorization: Bearer accessToken
+  <- user profile with roles including ADMIN
+
+Browser
+  -> GET/PATCH /api/admin/** with Authorization: Bearer accessToken
+  <- live paginated/admin DTO data
+
+On 401:
+  -> POST /api/auth/refresh with refreshToken
+  <- { accessToken }
+  -> retry original request once
 ```
-[ ]  TODO        — not started
-[~]  IN PROGRESS — actively being worked on
-[x]  DONE        — completed
-[!]  BLOCKED     — waiting on a decision or external dependency
+
+Backend security:
+
+```java
+.requestMatchers("/api/admin/**").hasRole("ADMIN")
 ```
 
 ---
 
-## Quick Progress Summary
+## Phase 0 — Production Readiness Decisions
 
-| Phase | Title | Status |
-|-------|-------|--------|
-| 0 | Prerequisites | `[ ] TODO` |
-| 1 | Project Scaffold (Frontend) | `[ ] TODO` |
-| 2 | Auth — Backend JWT Admin Login (Frontend) | `[ ] TODO` |
-| 3 | Backend Admin Package (Spring Boot) | `[ ] TODO` |
-| 4 | Frontend Screens | `[ ] TODO` |
-| 5 | Map Integration | `[ ] TODO` |
-| 6 | Deployment | `[ ] TODO` |
-
-> Update this table as you complete phases. Update individual task checkboxes below as you go.
-
----
-
-## Reference — Domain Recap
-
-| Entity        | Key states / roles |
-|---------------|--------------------|
-| Users         | `NETA` (requester), `KARYAKARTA` (helper), `ADMIN` |
-| Help Requests | `DRAFT → OPEN → PENDING_AUTH → ASSIGNED → WORK_DONE_PENDING_CONFIRMATION → REVIEW_REQUIRED → COMPLETED / CANCELLED` |
-| Auth          | Backend JWT login (`/api/auth/login`) + `/api/auth/me` ADMIN role check; backend calls use `Authorization: Bearer <accessToken>` |
-| Infra         | Kafka (STT), AWS S3 (audio), PostGIS (geo on help requests) |
-
-## Reference — Tech Stack
-
-| Concern       | Choice                        | Reason |
-|---------------|-------------------------------|--------|
-| Framework     | Expo SDK 52 + expo-router     | File-based routing, web-first config |
-| Styling       | NativeWind (Tailwind for RN)  | Utility classes, renders cleanly on web |
-| API state     | @tanstack/react-query         | Pagination, caching, refetch on focus |
-| Data tables   | @tanstack/react-table         | Full-featured, web-native `<table>` output |
-| Maps          | react-leaflet                 | Only web-compatible map lib, no native modules |
-| HTTP          | axios                         | Bearer token interceptor + refresh retry |
-| Session       | access + refresh JWTs         | Stored in localStorage for web session persistence; cleared on logout/auth failure |
-| Date          | dayjs                         | Lightweight, formats OffsetDateTime from backend |
-
-## Reference — Open Decisions
-
-Resolve these before the affected phase begins:
-
-- `[!]` **Role mutation rules** — define before implementing role change: no self-demotion, no removing last ADMIN, valid role combinations
-- `[!]` **Admin action audit** — log role changes, data access mutations (needs new table) — required before production; out of scope for v1 internal tool only
-- `[!]` **Admin endpoint tests** — add tests for: unauthenticated → 401, non-admin JWT → 403, ADMIN JWT → 200
-- `[!]` **CORS for production domain** — add `admin.oolshik.com` to `APP_CORS_ALLOWED_ORIGINS`
-- `[!]` **Geo DTO shape** — confirm how PostGIS `Point` is serialized: `{x, y}` vs `{lat, lng}`
-- `[!]` **Pagination response shape** — confirm Spring `Page<T>`: `{ content, totalElements, totalPages, number }`
-- `[!]` **PII masking rules** — define which fields are masked in admin responses (phone numbers, emails, etc.)
+- [ ] Confirm admin portal domain, e.g. `admin.oolshik.com`.
+- [ ] Add local and production admin origins to backend CORS.
+- [ ] Confirm admin seed process:
+  - dev: `ADMIN_SEED_ENABLED=true`
+  - prod: manually provision first ADMIN or run one-time migration
+- [ ] Decide token storage policy:
+  - v1: `localStorage` access + refresh tokens
+  - stronger future option: backend-set HTTP-only refresh cookie
+- [ ] Decide admin audit requirements before enabling mutations:
+  - role updates
+  - status overrides
+  - notification retries
+  - report resolution
+- [ ] Decide PII visibility and masking rules:
+  - phone
+  - email
+  - OTP audit rows
+  - payment references
+  - audio URLs/transcripts
 
 ---
 
-## Phase 0 — Prerequisites
+## Phase 1 — Remove Production Mock Dependency
 
-> Must be fully done before writing any code in Phase 1 or Phase 3.
+### 1.1 Frontend Environment Contract
 
-- [ ] **0.1** Seed or create an ADMIN user with a password hash usable by `/api/auth/login`
-- [ ] **0.2** Add `.env` to `.gitignore` in both `oolshik_web/` and `oolshik-backend-otp/`
-- [ ] **0.3** Add `http://localhost:8081` (Expo web dev) to `APP_CORS_ALLOWED_ORIGINS` in backend config
-- [ ] **0.4** Add production admin domain (e.g. `admin.oolshik.com`) to `APP_CORS_ALLOWED_ORIGINS`
-- [ ] **0.5** Seed an ADMIN user in the database:
-  ```sql
-  UPDATE app_user SET roles = 'ADMIN' WHERE phone_number = '+91...';
-  -- or set ADMIN_SEED_ENABLED=true in backend config
-  ```
-
----
-
-## Phase 1 — Project Scaffold (Frontend)
-
-### 1.1 — Create Expo App
-
-- [ ] **1.1.1** Run scaffold command:
-  ```bash
-  npx create-expo-app oolshik_web --template tabs
-  cd oolshik_web
-  ```
-- [ ] **1.1.2** Set `platforms` to web-only in `app.json`:
-  ```json
-  { "expo": { "platforms": ["web"] } }
-  ```
-- [ ] **1.1.3** Install all dependencies:
-  ```bash
-  npx expo install expo-router react-native-web react-dom
-  npm install nativewind tailwindcss
-  npm install @tanstack/react-query @tanstack/react-table
-  npm install react-leaflet leaflet
-  npm install axios dayjs
-  ```
-
-### 1.2 — Directory Structure
-
-Create the following layout. Tick each item as the file/folder is created:
-
-- [ ] **1.2.1** `app/(auth)/login.tsx`
-- [ ] **1.2.2** `app/(admin)/_layout.tsx`
-- [ ] **1.2.3** `app/(admin)/index.tsx` (dashboard, route: `/`)
-- [ ] **1.2.4** `app/(admin)/users/index.tsx`
-- [ ] **1.2.5** `app/(admin)/users/[id].tsx`
-- [ ] **1.2.6** `app/(admin)/requests/index.tsx`
-- [ ] **1.2.7** `app/(admin)/requests/[id].tsx`
-- [ ] **1.2.8** `app/(admin)/otp-audit.tsx`
-- [ ] **1.2.9** `app/(admin)/transcription.tsx`
-- [ ] **1.2.10** `app/(admin)/payments.tsx`
-- [ ] **1.2.11** `app/(admin)/reports.tsx`
-- [ ] **1.2.12** `app/(admin)/notifications.tsx`
-- [ ] **1.2.13** `src/api/` — axios instance + typed API calls per domain
-- [ ] **1.2.14** `src/components/` — `DataTable`, `StatCard`, `StatusBadge`, `SidebarNav`
-- [ ] **1.2.15** `src/hooks/` — `useAuth`, `useUsers`, `useHelpRequests`, ...
-- [ ] **1.2.16** `src/lib/` — axios config, session helpers
-
-### 1.3 — Environment File
-
-- [ ] **1.3.1** Create `.env` at project root:
-  ```
-  EXPO_PUBLIC_API_BASE_URL=http://localhost:8080
+- [ ] Keep only these public env vars:
+  ```env
+  EXPO_PUBLIC_API_BASE_URL=https://api.oolshik.com
   EXPO_PUBLIC_USE_MOCKS=false
+  EXPO_PUBLIC_ENV=production
   ```
-- [ ] **1.3.2** Confirm `.env` is listed in `.gitignore`
+- [ ] Remove all public admin credential/API-key env vars:
+  - `EXPO_PUBLIC_ADMIN_USERNAME`
+  - `EXPO_PUBLIC_ADMIN_PASSWORD`
+  - `EXPO_PUBLIC_ADMIN_API_KEY`
+- [ ] Add a fail-closed guard:
+  - if `EXPO_PUBLIC_ENV=production` and `EXPO_PUBLIC_USE_MOCKS=true`, throw during app startup
+  - if `EXPO_PUBLIC_API_BASE_URL` is missing in production, throw during app startup
+
+### 1.2 Mock Isolation
+
+- [ ] Keep `src/api/mock.ts` only for local UI development.
+- [ ] Move mock imports behind a dev-only loader so production does not eagerly import mock datasets.
+- [ ] Add a visible local-only banner when mocks are enabled.
+- [ ] Add a test that production env cannot enable mocks.
+- [ ] Add CI check that scans for forbidden production references:
+  - `EXPO_PUBLIC_ADMIN_`
+  - `X-Admin-Key`
+  - `isLoggedIn`
+  - hardcoded demo credentials
+
+### 1.3 Acceptance Criteria
+
+- [ ] `EXPO_PUBLIC_USE_MOCKS=false` makes every admin screen call the backend.
+- [ ] Production build fails or throws early if mocks are enabled.
+- [ ] No frontend admin secrets exist in source, README, plan, or env examples.
 
 ---
 
-## Phase 2 — Auth: Backend JWT Admin Login (Frontend)
+## Phase 2 — Backend Admin API Contract
 
-> No admin username, password, or API key is stored in `EXPO_PUBLIC_*` variables.
-> The browser sends user-entered credentials to `/api/auth/login`, stores the returned
-> JWTs for session persistence, and verifies `ADMIN` via `/api/auth/me`.
+Create a backend package:
 
-### 2.1 — Login Screen (`app/(auth)/login.tsx`)
+```text
+src/main/java/com/oolshik/backend/admin/
+  AdminController.java
+  AdminService.java
+  AdminDtos.java
+```
 
-- [ ] **2.1.1** Render email + password fields and a "Login" button
-- [ ] **2.1.2** On submit, call backend login:
+All endpoints:
+- require `ADMIN`
+- return DTOs, not entities
+- use `Pageable` for lists
+- validate filters
+- enforce PII masking rules
+- avoid lazy-loading surprises by mapping inside service transactions
+
+### 2.1 Endpoint Matrix
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/admin/stats` | Dashboard KPI summary |
+| GET | `/api/admin/users` | Paginated users list |
+| GET | `/api/admin/users/{id}` | User detail |
+| GET | `/api/admin/users/{id}/requests` | User-related help requests |
+| GET | `/api/admin/users/{id}/otp` | User OTP audit subset |
+| PATCH | `/api/admin/users/{id}/roles` | Role mutation |
+| GET | `/api/admin/requests` | Paginated help requests |
+| GET | `/api/admin/requests/{id}` | Request detail |
+| GET | `/api/admin/otp-audit` | Paginated OTP audit |
+| GET | `/api/admin/transcription-jobs` | Paginated transcription jobs |
+| GET | `/api/admin/payments` | Paginated payment requests |
+| GET | `/api/admin/reports` | Paginated reports |
+| GET | `/api/admin/notifications` | Paginated notification outbox |
+
+### 2.2 Query Conventions
+
+Use Spring pageable consistently:
+
+```text
+page=0
+size=20
+sort=createdAt,desc
+```
+
+Filters:
+
+```text
+search=<text>
+status=OPEN
+statuses=OPEN,REVIEW_REQUIRED
+from=2026-06-01T00:00:00Z
+to=2026-06-13T23:59:59Z
+role=ADMIN
+mode=MERCHANT_QR
+```
+
+### 2.3 DTO Rules
+
+- IDs are UUID strings.
+- Timestamps are ISO-8601 strings.
+- Roles are arrays: `["NETA", "ADMIN"]`.
+- Geo is explicit:
   ```ts
-  POST /api/auth/login { email, password }
+  { lat: number; lng: number }
   ```
-- [ ] **2.1.3** Store `{ accessToken, refreshToken }` on success
-- [ ] **2.1.4** Call `GET /api/auth/me`; if roles do not include `ADMIN`, clear tokens and show an access error
-- [ ] **2.1.5** Redirect ADMIN users to `/dashboard`
+- Money fields use integer paise or clearly named INR values; do not mix.
+- Transcription status must match backend enum:
+  - `PENDING`
+  - `PROCESSING`
+  - `COMPLETED`
+  - `FAILED`
+- Payment status must match backend status values:
+  - `PENDING`
+  - `INITIATED`
+  - `PAID_MARKED`
+  - `DISPUTED`
+  - `CANCELLED`
 
-### 2.2 — Route Guard (`app/(admin)/_layout.tsx`)
+### 2.4 Backend Acceptance Criteria
 
-- [ ] **2.2.1** On mount, require stored tokens and call `GET /api/auth/me`
-- [ ] **2.2.2** If missing/expired/non-admin → clear tokens and `router.replace("/login")`
-- [ ] **2.2.3** Render sidebar nav + `<Slot />` for child screens when authenticated
+- [ ] All admin endpoints return `401` with no JWT.
+- [ ] All admin endpoints return `403` for non-admin JWT.
+- [ ] All admin endpoints return expected DTOs for admin JWT.
+- [ ] List endpoints return stable `Page<T>` envelopes.
+- [ ] Filters are covered by service/controller tests.
+- [ ] Role mutation prevents:
+  - self-demotion
+  - removing the last ADMIN
+  - empty roles
+  - invalid role strings
 
-### 2.3 — Logout
+---
 
-- [ ] **2.3.1** Add a Logout button in the sidebar nav
-- [ ] **2.3.2** On press — clear access/refresh tokens then `router.replace("/login")`
+## Phase 3 — Frontend Live Data Cutover
 
-### 2.4 — Axios Setup (`src/api/client.ts`)
+### 3.1 API Layer
 
-- [ ] **2.4.1** Create axios instance with `baseURL = EXPO_PUBLIC_API_BASE_URL`
-- [ ] **2.4.2** Attach bearer access token on every request:
+- [ ] Remove direct component dependency on mock shape assumptions.
+- [ ] Keep `src/api/types.ts` synchronized with backend `AdminDtos.java`.
+- [ ] Add runtime response validation for admin DTOs, preferably with `zod`.
+- [ ] Convert `src/api/admin.ts` to call live APIs by default.
+- [ ] Make mock mode an explicit dev-only opt-in.
+- [ ] Normalize backend errors into a small frontend error model:
   ```ts
-  Authorization: Bearer <accessToken>
+  type ApiError = {
+    status: number;
+    message: string;
+    code?: string;
+  };
   ```
-- [ ] **2.4.3** On `401`, call `/api/auth/refresh` once, update access token, and retry the original request
+
+### 3.2 Screen Behavior
+
+Each screen must handle:
+- loading state
+- empty state
+- error state with retry
+- unauthorized state via global auth handling
+- stale data refresh
+- pagination boundaries
+- filter reset
+
+Screens:
+
+- [ ] Dashboard uses `/api/admin/stats` and recent requests from `/api/admin/requests`.
+- [ ] Users list uses `/api/admin/users`.
+- [ ] User detail uses `/api/admin/users/{id}`, `/requests`, and `/otp`.
+- [ ] Requests list uses `/api/admin/requests`.
+- [ ] Request detail uses `/api/admin/requests/{id}`.
+- [ ] OTP audit uses `/api/admin/otp-audit`.
+- [ ] Transcription uses `/api/admin/transcription-jobs`.
+- [ ] Payments uses `/api/admin/payments`.
+- [ ] Reports uses `/api/admin/reports`.
+- [ ] Notifications uses `/api/admin/notifications`.
+
+### 3.3 React Query Defaults
+
+Recommended defaults:
+
+```ts
+staleTime: 15_000
+gcTime: 5 * 60_000
+retry: (failureCount, error) => failureCount < 2 && !isAuthError(error)
+refetchOnWindowFocus: true
+```
+
+Polling:
+- dashboard: 30 seconds
+- notifications: 30 seconds
+- transcription: 15 seconds while jobs are `PENDING` or `PROCESSING`
+- normal list screens: no polling unless a filter is active or user requests refresh
+
+### 3.4 Frontend Acceptance Criteria
+
+- [ ] With `EXPO_PUBLIC_USE_MOCKS=false`, no mock API function is called.
+- [ ] Every screen works against a seeded backend database.
+- [ ] Token refresh recovers from expired access tokens.
+- [ ] Non-admin users are redirected away from admin routes.
+- [ ] All role mutation actions invalidate affected queries.
+- [ ] `npm run typecheck` passes.
+- [ ] `npm run build:web` passes.
 
 ---
 
-## Phase 3 — Backend Admin Package (Spring Boot)
+## Phase 4 — Real-Time Strategy
 
-**Repo:** `/Users/nitinkalokhe/Ni3/spring_boot_proj/oolshik-backend-otp`
+Start with production-safe polling. Add push streaming only where polling is too slow or expensive.
 
-> All new files go under `src/main/java/com/oolshik/backend/admin/`.
-> Follows the same self-contained package convention as `payment/` and `transcription/`.
-> Nothing in existing packages is moved.
+### 4.1 V1: Polling
 
-### 3.1 — Package Setup
+- [ ] Dashboard refetch interval: 30 seconds.
+- [ ] Transcription jobs refetch interval: 15 seconds when active jobs exist.
+- [ ] Notifications refetch interval: 30 seconds.
+- [ ] Manual refresh button on every list/detail view.
 
-- [ ] **3.1.1** Create directory `src/main/java/com/oolshik/backend/admin/`
+### 4.2 V2: Server-Sent Events
 
-### 3.2 — JWT Role Security
+Add SSE only after V1 is stable:
 
-- [ ] **3.2.1** Secure `/api/admin/**` with ADMIN role authorization:
-  ```java
-  .requestMatchers("/api/admin/**").hasRole("ADMIN")
-  ```
-- [ ] **3.2.2** Ensure `JwtAuthFilter` remains registered before protected admin endpoints are evaluated
-- [ ] **3.2.3** Add admin authorization tests for unauthenticated, non-admin, and ADMIN users
+```text
+GET /api/admin/events
+Authorization: Bearer <accessToken>
+```
 
-### 3.3 — DTOs
+Events:
+- `help_request.updated`
+- `notification.failed`
+- `transcription.completed`
+- `transcription.failed`
+- `report.created`
+- `payment.updated`
 
-- [ ] **3.3.1** Create `admin/AdminDtos.java` with records for:
-  - `StatsResponse`
-  - `AdminUserSummary`, `AdminUserDetail`
-  - `AdminRequestSummary`, `AdminRequestDetail`
-  - `AdminOtpAuditRow`
-  - `AdminTranscriptionRow`
-  - `AdminPaymentRow`
-  - `AdminReportRow`
-  - `AdminNotificationRow`
-
-### 3.4 — Repository Modifications
-
-Add pageable/search methods to existing repos where missing:
-
-- [ ] **3.4.1** `repo/UserRepository.java` — add `Page<UserEntity> findByDisplayNameContainingOrPhoneNumberContaining(String, String, Pageable)`
-- [ ] **3.4.2** `repo/HelpRequestRepository.java` — add `Page<HelpRequestEntity> findByStatusInAndCreatedAtBetween(List<HelpRequestStatus>, OffsetDateTime, OffsetDateTime, Pageable)`
-- [ ] **3.4.3** `repo/OtpAuditLogRepository.java` — confirm `findAll(Pageable)` exists (inherited from `JpaRepository`)
-- [ ] **3.4.4** `repo/NotificationOutboxRepository.java` — confirm `findAll(Pageable)` exists
-- [ ] **3.4.5** `repo/ReportEventRepository.java` — confirm `findAll(Pageable)` exists
-- [ ] **3.4.6** `payment/PaymentRequestRepository.java` — confirm `findAll(Pageable)` exists
-- [x] **3.4.7** `transcription/TranscriptionJobRepository.java` — `findAll(Pageable)` is **already inherited** from `JpaRepository<TranscriptionJobEntity, UUID>`, no change needed
-
-### 3.5 — AdminService
-
-- [ ] **3.5.1** Create `admin/AdminService.java` — aggregates data from all repos above
-
-### 3.6 — AdminController Endpoints
-
-- [ ] **3.6.1** Create `admin/AdminController.java` with base mapping `/api/admin`
-- [ ] **3.6.2** `GET /api/admin/stats` — total users, open requests, REVIEW_REQUIRED count, failed STT jobs, failed notifications
-- [ ] **3.6.3** `GET /api/admin/users?page&size&sort&search` — paginated user list
-- [ ] **3.6.4** `PATCH /api/admin/users/{id}/roles` — update user roles
-- [ ] **3.6.5** `GET /api/admin/requests?page&size&sort&status&from&to` — paginated request list
-- [ ] **3.6.6** `GET /api/admin/requests/{id}` — request detail with events + candidates
-- [ ] **3.6.7** `GET /api/admin/otp-audit?page&size&sort` — paginated OTP audit log
-- [ ] **3.6.8** `GET /api/admin/transcription-jobs?page&size&sort` — paginated transcription jobs
-- [ ] **3.6.9** `GET /api/admin/payments?page&size&sort` — paginated payments
-- [ ] **3.6.10** `GET /api/admin/reports?page&size&sort` — paginated reports
-- [ ] **3.6.11** `GET /api/admin/notifications?page&size&sort` — paginated notification outbox
-
-> All endpoints follow Spring `Pageable` convention: `?page=0&size=20&sort=createdAt,desc`
-
-### 3.7 — Backend Admin Tests
-
-- [ ] **3.7.1** Test admin endpoint with no bearer token → 401
-- [ ] **3.7.2** Test admin endpoint with non-admin JWT → 403
-- [ ] **3.7.3** Test admin endpoint with ADMIN JWT → 200
-- [ ] **3.7.4** Test `PATCH /api/admin/users/{id}/roles` — valid role change succeeds
-- [ ] **3.7.5** Test `PATCH /api/admin/users/{id}/roles` — self-demotion returns error (once rule is decided)
-- [ ] **3.7.6** Test `PATCH /api/admin/users/{id}/roles` — removing last ADMIN returns error (once rule is decided)
+Frontend behavior:
+- update React Query cache or invalidate narrow query keys
+- reconnect with exponential backoff
+- fall back to polling
 
 ---
 
-## Phase 4 — Frontend Screens
+## Phase 5 — Security Hardening
 
-> Depends on Phase 3 endpoints being live. Build one screen at a time.
+Backend:
+- [ ] Add `.requestMatchers("/api/admin/**").hasRole("ADMIN")`.
+- [ ] Add admin authorization tests.
+- [ ] Add rate limiting for `/api/auth/login`.
+- [ ] Add audit events for admin mutations.
+- [ ] Mask PII based on admin policy.
+- [ ] Avoid exposing raw S3 URLs unless signed and short-lived.
 
-### 4.1 — Dashboard (`app/(admin)/index.tsx`)
-
-- [ ] **4.1.1** Call `GET /api/admin/stats` via react-query
-- [ ] **4.1.2** Render `StatCard` components: total users, active requests, REVIEW_REQUIRED count, STT failures, notification failures
-
-### 4.2 — Users Screen
-
-- [ ] **4.2.1** `users/index.tsx` — searchable + filterable table (display name, phone, email, roles, joined date), server-side pagination
-- [ ] **4.2.2** `users/[id].tsx` — full profile detail, federated identities, OTP history, their requests
-- [ ] **4.2.3** Role change action — dropdown → `PATCH /api/admin/users/{id}/roles`
-
-### 4.3 — Help Requests Screen
-
-- [ ] **4.3.1** `requests/index.tsx` — filter by status (multi-select) + date range, paginated table (title, requester, helper, status badge, created at, lat/lng)
-- [ ] **4.3.2** `requests/[id].tsx` — request detail: title, description, status, radius, event timeline, candidates list, audio + transcript, ratings
-- [ ] **4.3.3** Map placeholder (will be filled in Phase 5)
-
-### 4.4 — OTP Audit Screen (`otp-audit.tsx`)
-
-- [ ] **4.4.1** Table: phone (masked), purpose, provider, status, attempted at — paginated
-
-### 4.5 — Transcription Jobs Screen (`transcription.tsx`)
-
-- [ ] **4.5.1** Table: request ID, status, engine, created at, updated at — paginated
-- [ ] **4.5.2** Expandable row showing transcript text preview
-
-### 4.6 — Payments Screen (`payments.tsx`)
-
-- [ ] **4.6.1** Table: request ID, payer role, amount, payment mode, status, created at — paginated
-
-### 4.7 — Reports Screen (`reports.tsx`)
-
-- [ ] **4.7.1** Table: reporter, reported user/request, reason, reported at — paginated
-
-### 4.8 — Notifications Outbox Screen (`notifications.tsx`)
-
-- [ ] **4.8.1** Table: event type, status, attempts / 8, last attempted at — paginated
-- [ ] **4.8.2** Highlight rows where `attempts >= maxAttempts` (permanent failure)
+Frontend:
+- [ ] Remove admin secrets from public env.
+- [ ] Fail production startup if mocks are enabled.
+- [ ] Clear tokens on refresh failure.
+- [ ] Never log tokens, OTPs, or credentials.
+- [ ] Add `Content-Security-Policy` at host/CDN level.
+- [ ] Use HTTPS-only API base URL in production.
 
 ---
 
-## Phase 5 — Map Integration
+## Phase 6 — Testing Strategy
 
-- [ ] **5.1** Confirm geo DTO shape from `AdminDtos.java` (resolve open decision `[!]` above)
-- [ ] **5.2** Add react-leaflet map to `requests/[id].tsx`:
-  ```tsx
-  import { MapContainer, TileLayer, Marker, Circle } from 'react-leaflet';
+### 6.1 Backend Tests
 
-  <MapContainer center={[lat, lng]} zoom={14} style={{ height: 300 }}>
-    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-    <Marker position={[lat, lng]} />
-    <Circle center={[lat, lng]} radius={radiusMeters} />
-  </MapContainer>
-  ```
-  Uses OpenStreetMap tiles — no API key required.
-- [ ] **5.3** Test map renders correctly in browser with a real request that has geo coordinates
+- [ ] Controller authorization tests.
+- [ ] Service mapping tests for each DTO.
+- [ ] Repository filter tests.
+- [ ] Pagination/sort tests.
+- [ ] Role mutation guardrail tests.
+- [ ] PII masking tests.
 
----
+### 6.2 Frontend Tests
 
-## Phase 6 — Deployment
+- [ ] TypeScript check in pre-commit and CI.
+- [ ] API contract fixtures for each DTO.
+- [ ] Auth flow tests:
+  - login success
+  - login failure
+  - non-admin denial
+  - refresh success
+  - refresh failure
+- [ ] Screen smoke tests for all admin routes.
+- [ ] Build verification with `EXPO_PUBLIC_USE_MOCKS=false`.
 
-### 6.1 — Build
+### 6.3 End-to-End Smoke Test
 
-- [ ] **6.1.1** Run web export:
-  ```bash
-  npx expo export --platform web   # outputs to /dist
-  ```
+Against a seeded dev backend:
 
-### 6.2 — SPA Routing Rewrites
-
-> Required — without this, any direct URL (e.g. `/users/123`) returns 404.
-
-- [ ] **6.2.1** **Vercel** — create `vercel.json` at project root:
-  ```json
-  { "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
-  ```
-- [ ] **6.2.2** **S3 + CloudFront** — set error page for 403/404 → `/index.html` with HTTP 200; set S3 error document to `index.html`
-
-### 6.3 — Deploy
-
-Choose one option:
-
-- [ ] **6.3.1** **Option A — Vercel:**
-  ```bash
-  npm install -g vercel
-  vercel --prod
-  ```
-  Set `EXPO_PUBLIC_API_BASE_URL` and `EXPO_PUBLIC_USE_MOCKS=false` as Vercel environment variables.
-
-- [ ] **6.3.2** **Option B — S3 + CloudFront:**
-  ```bash
-  aws s3 sync dist/ s3://oolshik-admin-bucket --delete
-  aws cloudfront create-invalidation --distribution-id <ID> --paths "/*"
-  ```
-  Set env vars at build time before running `expo export`.
+1. Login as ADMIN.
+2. Dashboard renders real KPI data.
+3. Open users list and user detail.
+4. Open requests list and request detail map.
+5. Open OTP, transcription, payments, reports, notifications.
+6. Change a test user's roles and verify audit/guardrails.
+7. Expire access token and verify refresh retry.
 
 ---
 
-## Out of Scope (v1 — internal tool only)
+## Phase 7 — Observability
 
-- Real-time updates (WebSocket / SSE) — react-query `refetchInterval` is sufficient
-- Dark mode
-- Mobile/tablet native build — web-only target
-- Admin action audit log — out of scope for v1 **internal** tool; **required before any public/production deployment** (see Open Decisions)
+Backend:
+- [ ] Log admin endpoint access with admin user ID, route, status, latency.
+- [ ] Do not log credentials, JWTs, OTPs, raw phone numbers, or raw transcripts.
+- [ ] Add metrics:
+  - admin request count by endpoint/status
+  - auth failures
+  - role mutations
+  - notification permanent failures
+  - transcription failures
+
+Frontend:
+- [ ] Add production error boundary.
+- [ ] Show request IDs/correlation IDs when backend returns them.
+- [ ] Add client-side error reporting for route-level crashes.
+
+---
+
+## Phase 8 — Deployment
+
+### 8.1 Build
+
+```bash
+npm run typecheck
+npm run build:web
+```
+
+### 8.2 Required Production Env
+
+```env
+EXPO_PUBLIC_API_BASE_URL=https://api.oolshik.com
+EXPO_PUBLIC_USE_MOCKS=false
+EXPO_PUBLIC_ENV=production
+```
+
+### 8.3 Static Hosting
+
+Vercel:
+
+```json
+{
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+```
+
+S3 + CloudFront:
+- route 403/404 to `/index.html`
+- set security headers
+- require HTTPS
+- invalidate on deploy
+
+### 8.4 Release Checklist
+
+- [ ] Backend admin endpoints deployed.
+- [ ] Backend CORS includes admin domain.
+- [ ] ADMIN user exists and login works.
+- [ ] `EXPO_PUBLIC_USE_MOCKS=false`.
+- [ ] Production build passes.
+- [ ] Smoke test passes against production-like data.
+- [ ] Rollback artifact available.
+
+---
+
+## Phase 9 — Cutover Order
+
+1. Backend security and admin endpoints.
+2. Backend tests.
+3. Frontend API contract alignment.
+4. Disable mocks in local `.env`.
+5. Run full frontend against local backend.
+6. Run full frontend against staging backend.
+7. Add deployment env.
+8. Build and deploy static web app.
+9. Run production smoke test.
+10. Monitor logs and metrics.
+
+---
+
+## Definition Of Done
+
+- [ ] No generated mock data is used in production.
+- [ ] No admin secrets are present in public env vars or web bundle.
+- [ ] Every admin screen reads from live backend APIs.
+- [ ] Backend enforces `ADMIN` authorization for `/api/admin/**`.
+- [ ] TypeScript, frontend build, backend tests, and smoke tests pass.
+- [ ] Admin mutations have guardrails.
+- [ ] Production deployment has CORS, HTTPS, CSP, and rollback.

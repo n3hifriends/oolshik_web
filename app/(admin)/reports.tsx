@@ -4,8 +4,7 @@ import { useRouter } from "expo-router";
 import { COLORS } from "@/theme/tokens";
 import { fmtDate } from "@/lib/format";
 import { useReports } from "@/hooks/useAdmin";
-import { PageHeader, FilterBar } from "@/components/PageHeader";
-import { Select } from "@/components/inputs";
+import { PageHeader } from "@/components/PageHeader";
 import { DataTable, Column } from "@/components/DataTable";
 import { Button, Pill, UserCell } from "@/components/ui";
 import type { AdminReportRow } from "@/api/types";
@@ -14,9 +13,8 @@ const PAGE_SIZE = 12;
 
 export default function ReportsScreen() {
   const router = useRouter();
-  const [status, setStatus] = useState("ALL");
   const [page, setPage] = useState(0);
-  const { data, isFetching } = useReports({ page, size: PAGE_SIZE, status });
+  const { data, isFetching } = useReports({ page, size: PAGE_SIZE });
 
   const columns: Column<AdminReportRow>[] = [
     {
@@ -48,7 +46,6 @@ export default function ReportsScreen() {
         <Text style={{ fontWeight: "500", color: COLORS.text, fontSize: 13.5 }}>{r.reason}</Text>
       ),
     },
-    { key: "status", label: "Status", flex: 1, render: (r) => <RepStatusPill status={r.status} /> },
     {
       key: "at",
       label: "Reported",
@@ -83,23 +80,6 @@ export default function ReportsScreen() {
   return (
     <View>
       <PageHeader title="Reports" subtitle={`${data?.totalElements ?? 0} reports`} />
-      <FilterBar>
-        <Select
-          value={status}
-          onChange={(v) => {
-            setStatus(v);
-            setPage(0);
-          }}
-          width={160}
-          options={[
-            { value: "ALL", label: "All statuses" },
-            { value: "OPEN", label: "Open" },
-            { value: "REVIEWING", label: "Reviewing" },
-            { value: "RESOLVED", label: "Resolved" },
-            { value: "DISMISSED", label: "Dismissed" },
-          ]}
-        />
-      </FilterBar>
       <DataTable
         columns={columns}
         rows={data?.content ?? []}
@@ -111,20 +91,5 @@ export default function ReportsScreen() {
         onPageChange={setPage}
       />
     </View>
-  );
-}
-
-function RepStatusPill({ status }: { status: AdminReportRow["status"] }) {
-  const map = { OPEN: "red", REVIEWING: "amber", RESOLVED: "green", DISMISSED: "gray" } as const;
-  const label = {
-    OPEN: "Open",
-    REVIEWING: "Reviewing",
-    RESOLVED: "Resolved",
-    DISMISSED: "Dismissed",
-  };
-  return (
-    <Pill tone={map[status]} dot={status !== "DISMISSED"}>
-      {label[status]}
-    </Pill>
   );
 }

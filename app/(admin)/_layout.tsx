@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { ScrollView, View, useWindowDimensions } from "react-native";
 import { Redirect, Slot, usePathname, useRouter } from "expo-router";
 import { COLORS } from "@/theme/tokens";
 import { session } from "@/lib/session";
 import { Sidebar, Topbar, type AdminRoute } from "@/components/Layout";
+import { authApi } from "@/api/auth";
 
 // Breadcrumb labels per route segment.
 const TITLES: Record<AdminRoute, string> = {
@@ -53,8 +54,34 @@ export default function AdminLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const { width } = useWindowDimensions();
+  const [authed, setAuthed] = useState<boolean | null>(null);
 
-  if (!session.isLoggedIn()) return <Redirect href="/login" />;
+  useEffect(() => {
+    let active = true;
+    async function verifyAdmin() {
+      if (!session.hasTokens()) {
+        setAuthed(false);
+        return;
+      }
+      try {
+        const me = await authApi.me();
+        if (!active) return;
+        const isAdmin = me.roles.includes("ADMIN");
+        if (!isAdmin) session.clear();
+        setAuthed(isAdmin);
+      } catch {
+        session.clear();
+        if (active) setAuthed(false);
+      }
+    }
+    void verifyAdmin();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (authed === false) return <Redirect href="/login" />;
+  if (authed === null) return <View style={{ flex: 1, backgroundColor: COLORS.canvas }} />;
 
   const logout = () => {
     session.clear();

@@ -317,14 +317,19 @@ export function Stars({ n }: { n: number }) {
 }
 
 /* ---------------- UserCell ---------------- */
-export function UserCell({ name, sub }: { name: string; sub?: string }) {
+export function UserCell({ name, sub }: { name: string; sub?: string | null }) {
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+    <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10 }}>
       <Avatar name={name} size={32} />
-      <View>
-        <Text style={{ fontWeight: "600", color: COLORS.text, fontSize: 14 }}>{name}</Text>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text numberOfLines={1} style={{ fontWeight: "600", color: COLORS.text, fontSize: 14 }}>
+          {name}
+        </Text>
         {sub && (
-          <Text style={{ fontSize: 11.5, color: COLORS.text3, fontFamily: "JetBrains Mono" }}>
+          <Text
+            numberOfLines={1}
+            style={{ fontSize: 11.5, color: COLORS.text3, fontFamily: "JetBrains Mono" }}
+          >
             {sub}
           </Text>
         )}

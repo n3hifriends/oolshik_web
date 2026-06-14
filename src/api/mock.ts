@@ -191,10 +191,12 @@ const users: AdminUserDetail[] = Array.from({ length: 47 }, (_, i) => {
     rating: +(3.4 + rng() * 1.6).toFixed(1),
     status: rng() > 0.08 ? "ACTIVE" : "SUSPENDED",
     joinedAt: ago(int(2, 380) * DAY),
-    verified: rng() > 0.12,
+    emailVerified: rng() > 0.12,
+    languages: "kn-IN,hi-IN,en-IN",
+    preferredLanguage: "kn-IN",
     requestsMade: roles.includes("NETA") ? int(0, 24) : int(0, 3),
     jobsDone: roles.includes("KARYAKARTA") ? int(0, 58) : 0,
-    lastActiveAt: ago(int(0, 96) * HOUR),
+    updatedAt: ago(int(0, 96) * HOUR),
     identities,
   };
 });
@@ -318,11 +320,15 @@ const otpAudit: AdminOtpAuditRow[] = Array.from({ length: 80 }, (_, i) => {
   const r = rng();
   return {
     id: "otp_" + (9000 + i).toString(36),
+    maskedPhone: u.phoneNumber ?? "—",
     phoneNumber: u.phoneNumber,
+    action: pick(PURPOSES),
     purpose: pick(PURPOSES),
     provider: pick(PROVIDERS),
     status: r < 0.78 ? "VERIFIED" : r < 0.9 ? "EXPIRED" : r < 0.96 ? "FAILED" : "RATE_LIMITED",
+    detail: null,
     attempts: int(1, 5),
+    createdAt: ago(int(0, 30) * DAY + int(0, 23) * HOUR),
     attemptedAt: ago(int(0, 30) * DAY + int(0, 23) * HOUR),
   };
 });
@@ -477,7 +483,7 @@ export const mockApi = {
       rows = rows.filter(
         (u) =>
           u.displayName.toLowerCase().includes(s) ||
-          u.phoneNumber.includes(p.search ?? "") ||
+          (u.phoneNumber ?? "").includes(p.search ?? "") ||
           (u.email ?? "").includes(s)
       );
     }
@@ -507,7 +513,9 @@ export const mockApi = {
           r.id.includes(p.search ?? "")
       );
     }
-    rows = [...rows].sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
+    rows = [...rows].sort(
+      (a, b) => +new Date(b.updatedAt ?? b.createdAt) - +new Date(a.updatedAt ?? a.createdAt)
+    );
     return delay(paginate(rows, p));
   },
   request: (id: string) => delay(requests.find((r) => r.id === id) ?? null),
@@ -518,10 +526,12 @@ export const mockApi = {
     if (p.search)
       rows = rows.filter(
         (o) =>
-          o.phoneNumber.includes(p.search ?? "") ||
-          o.purpose.toLowerCase().includes((p.search ?? "").toLowerCase())
+          (o.phoneNumber ?? o.maskedPhone).includes(p.search ?? "") ||
+          (o.action ?? o.purpose ?? "").toLowerCase().includes((p.search ?? "").toLowerCase())
       );
-    rows = [...rows].sort((a, b) => +new Date(b.attemptedAt) - +new Date(a.attemptedAt));
+    rows = [...rows].sort(
+      (a, b) => +new Date(b.createdAt ?? b.attemptedAt ?? "") - +new Date(a.createdAt ?? a.attemptedAt ?? "")
+    );
     return delay(paginate(rows, p));
   },
   transcription: (p: PageParams & { status?: string }) => {
@@ -546,7 +556,11 @@ export const mockApi = {
   notifications: (p: PageParams & { status?: string }) => {
     let rows = notifications;
     if (p.status && p.status !== "ALL") rows = rows.filter((x) => x.status === p.status);
-    rows = [...rows].sort((a, b) => +new Date(b.lastAttemptAt) - +new Date(a.lastAttemptAt));
+    rows = [...rows].sort(
+      (a, b) =>
+        +new Date(b.updatedAt ?? b.lastAttemptAt ?? b.createdAt ?? "") -
+        +new Date(a.updatedAt ?? a.lastAttemptAt ?? a.createdAt ?? "")
+    );
     return delay(paginate(rows, p));
   },
 };

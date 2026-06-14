@@ -95,9 +95,14 @@ export function Select({
   }
   // Native fallback: cycle through options on tap
   const idx = options.findIndex((o) => o.value === value);
+  const safeIdx = idx >= 0 ? idx : 0;
+  const selected = options[safeIdx];
   return (
     <Pressable
-      onPress={() => onChange(options[(idx + 1) % options.length].value)}
+      onPress={() => {
+        if (options.length === 0) return;
+        onChange(options[(safeIdx + 1) % options.length].value);
+      }}
       style={{
         width,
         flexDirection: "row",
@@ -112,7 +117,7 @@ export function Select({
       }}
     >
       <Text style={{ fontSize: 14, fontWeight: "500", color: COLORS.text }}>
-        {options[idx]?.label ?? ""}
+        {selected?.label ?? ""}
       </Text>
       <Icon name="chevD" size={15} color={COLORS.text3} />
     </Pressable>

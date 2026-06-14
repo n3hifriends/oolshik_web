@@ -13,6 +13,10 @@ import type { AdminRequestSummary } from "@/api/types";
 
 const PAGE_SIZE = 12;
 
+function formatCoordinate(value: number) {
+  return Number.isFinite(value) ? value.toFixed(5) : "—";
+}
+
 export default function RequestsScreen() {
   const router = useRouter();
   const { data: stats } = useStats();
@@ -33,13 +37,19 @@ export default function RequestsScreen() {
     {
       key: "title",
       label: "Request",
-      flex: 1.8,
+      flex: 1,
       render: (r) => (
-        <View>
-          <Text numberOfLines={1} style={{ fontWeight: "600", color: COLORS.text, fontSize: 13.5 }}>
+        <View style={{ minWidth: 0, gap: 4 }}>
+          <Text
+            numberOfLines={2}
+            style={{ fontWeight: "700", color: COLORS.text, fontSize: 13.5, lineHeight: 18 }}
+          >
             {r.title}
           </Text>
-          <Text style={{ fontFamily: "JetBrains Mono", fontSize: 11.5, color: COLORS.text3 }}>
+          <Text
+            numberOfLines={1}
+            style={{ fontFamily: "JetBrains Mono", fontSize: 11.5, color: COLORS.text3 }}
+          >
             {r.id}
           </Text>
         </View>
@@ -48,30 +58,37 @@ export default function RequestsScreen() {
     {
       key: "requester",
       label: "Requester",
-      flex: 1.2,
+      width: 240,
       render: (r) => <UserCell name={r.requester.displayName} sub={r.requester.phoneNumber} />,
     },
     {
       key: "helper",
       label: "Helper",
-      flex: 1.2,
+      width: 220,
       render: (r) =>
         r.helper ? (
           <UserCell name={r.helper.displayName} sub={r.helper.phoneNumber} />
         ) : (
-          <Text style={{ color: COLORS.text3, fontSize: 13 }}>Unassigned</Text>
+          <Text numberOfLines={1} style={{ color: COLORS.text3, fontSize: 13 }}>
+            Unassigned
+          </Text>
         ),
     },
-    { key: "status", label: "Status", flex: 1.1, render: (r) => <StatusBadge status={r.status} /> },
+    { key: "status", label: "Status", width: 150, render: (r) => <StatusBadge status={r.status} /> },
     {
       key: "geo",
       label: "Location",
-      flex: 1.1,
+      width: 190,
       render: (r) => (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+        <View style={{ minWidth: 0, flexDirection: "row", alignItems: "center", gap: 5 }}>
           <Icon name="pin" size={13} color={COLORS.orange} />
-          <Text style={{ fontFamily: "JetBrains Mono", fontSize: 12, color: COLORS.text2 }}>
-            {r.geo.lat}, {r.geo.lng}
+          <Text
+            numberOfLines={1}
+            style={{ fontFamily: "JetBrains Mono", fontSize: 12, color: COLORS.text2 }}
+          >
+            {r.geo
+              ? `${formatCoordinate(r.geo.lat)}, ${formatCoordinate(r.geo.lng)}`
+              : "Not pinned"}
           </Text>
         </View>
       ),
@@ -79,9 +96,11 @@ export default function RequestsScreen() {
     {
       key: "created",
       label: "Created",
-      flex: 0.9,
+      width: 130,
       render: (r) => (
-        <Text style={{ color: COLORS.text2, fontSize: 13 }}>{fmtDate(r.createdAt)}</Text>
+        <Text numberOfLines={1} style={{ color: COLORS.text2, fontSize: 13 }}>
+          {fmtDate(r.createdAt)}
+        </Text>
       ),
     },
   ];
@@ -145,6 +164,8 @@ export default function RequestsScreen() {
         columns={columns}
         rows={data?.content ?? []}
         loading={isFetching}
+        empty="No help requests match these filters."
+        minWidth={1220}
         onRowPress={(r) => router.push({ pathname: "/requests/[id]", params: { id: r.id } })}
         page={page}
         pageSize={PAGE_SIZE}

@@ -11,6 +11,10 @@ import { RequestMap } from "@/components/RequestMap";
 import type { AdminRequestDetail } from "@/api/types";
 
 type RequestField = { label: string; value: string; mono?: boolean };
+type LiveRequestDetail = AdminRequestDetail & {
+  offerAmount?: number | null;
+  offerCurrency?: string | null;
+};
 
 export default function RequestDetail() {
   const router = useRouter();
@@ -18,18 +22,21 @@ export default function RequestDetail() {
   const { width } = useWindowDimensions();
   const twoCol = width >= 1040;
   const { data } = useRequest(id);
-  const req: AdminRequestDetail | null | undefined = data;
+  const req: LiveRequestDetail | null | undefined = data;
 
   if (!req) return <PageHeader title="Loading request…" onBack={() => router.push("/requests")} />;
 
   const helper = req.helper;
+  const candidates = req.candidates ?? [];
+  const events = req.events ?? [];
+  const reward = req.rewardInr ?? req.offerAmount;
   const requestFields: RequestField[] = [
-    { label: "Reward", value: req.rewardInr ? inr(req.rewardInr) : "Free help" },
+    { label: "Reward", value: reward ? inr(reward) : "Free help" },
     { label: "Radius", value: `${req.radiusM} m`, mono: true },
-    { label: "Candidates", value: String(req.candidates.length), mono: true },
-    { label: "Area", value: req.area },
+    { label: "Candidates", value: String(candidates.length), mono: true },
+    { label: "Area", value: req.area ?? "Not available" },
     { label: "Created", value: fmtDate(req.createdAt, true) },
-    { label: "Last updated", value: timeAgo(req.updatedAt) },
+    { label: "Last updated", value: timeAgo(req.updatedAt ?? req.createdAt) },
   ];
 
   return (
@@ -91,30 +98,31 @@ export default function RequestDetail() {
             )}
           </Card>
 
-          {/* map */}
-          <Card padding={0} style={{ overflow: "hidden" }}>
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: 16,
-                borderBottomWidth: 1,
-                borderBottomColor: COLORS.line,
-              }}
-            >
-              <Text style={{ fontSize: 15, fontWeight: "700", color: COLORS.text }}>
-                Location & service radius
-              </Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                <Icon name="pin" size={13} color={COLORS.orange} />
-                <Text style={{ fontFamily: "JetBrains Mono", fontSize: 12, color: COLORS.text2 }}>
-                  {req.geo.lat}, {req.geo.lng}
+          {req.geo && (
+            <Card padding={0} style={{ overflow: "hidden" }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: 16,
+                  borderBottomWidth: 1,
+                  borderBottomColor: COLORS.line,
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: "700", color: COLORS.text }}>
+                  Location & service radius
                 </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                  <Icon name="pin" size={13} color={COLORS.orange} />
+                  <Text style={{ fontFamily: "JetBrains Mono", fontSize: 12, color: COLORS.text2 }}>
+                    {req.geo.lat}, {req.geo.lng}
+                  </Text>
+                </View>
               </View>
-            </View>
-            <RequestMap geo={req.geo} radiusM={req.radiusM} />
-          </Card>
+              <RequestMap geo={req.geo} radiusM={req.radiusM} />
+            </Card>
+          )}
 
           {/* audio + transcript */}
           <Card padding={20}>
@@ -169,9 +177,12 @@ export default function RequestDetail() {
           {/* timeline */}
           <Card padding={20}>
             <Text style={cardTitle}>Event timeline</Text>
-            {req.events.map((e, i) => {
+            {events.length === 0 && (
+              <Text style={{ color: COLORS.text3, fontSize: 13.5 }}>No events available.</Text>
+            )}
+            {events.map((e, i) => {
               const tone = STATUS_META[e.kind]?.tone ?? "blue";
-              const last = i === req.events.length - 1;
+              const last = i === events.length - 1;
               return (
                 <View
                   key={i}
@@ -220,15 +231,15 @@ export default function RequestDetail() {
               <Text style={{ fontSize: 15, fontWeight: "700", color: COLORS.text }}>
                 Candidates
               </Text>
-              <Pill tone="violet">{String(req.candidates.length)}</Pill>
+              <Pill tone="violet">{String(candidates.length)}</Pill>
             </View>
-            {req.candidates.length === 0 && (
+            {candidates.length === 0 && (
               <Text style={{ color: COLORS.text3, fontSize: 13.5 }}>
                 No helpers have responded yet.
               </Text>
             )}
             <View style={{ gap: 11 }}>
-              {req.candidates.map((c, i) => (
+              {candidates.map((c, i) => (
                 <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 11 }}>
                   <Avatar name={c.user.displayName} size={32} />
                   <View style={{ flex: 1 }}>

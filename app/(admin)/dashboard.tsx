@@ -192,7 +192,7 @@ export default function Dashboard() {
                   {r.title}
                 </Text>
                 <Text style={{ fontSize: 12, color: COLORS.text3 }}>
-                  {r.requester.displayName} · {timeAgo(r.updatedAt)}
+                  {r.requester.displayName} · {timeAgo(r.updatedAt ?? r.createdAt)}
                 </Text>
               </View>
               <Icon name="chevR" size={16} color={COLORS.text3} />
@@ -253,7 +253,7 @@ export default function Dashboard() {
               <StatusBadge status={r.status} />
             </View>
             <Text style={{ flex: 0.8, color: COLORS.text2, fontSize: 13, textAlign: "right" }}>
-              {timeAgo(r.updatedAt)}
+              {timeAgo(r.updatedAt ?? r.createdAt)}
             </Text>
           </Pressable>
         ))}

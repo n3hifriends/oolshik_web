@@ -10,28 +10,41 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { COLORS } from "@/theme/tokens";
-import { ENV } from "@/lib/env";
 import { session } from "@/lib/session";
 import { Icon } from "@/components/Icon";
 import { Button } from "@/components/ui";
 import { webTextStyle, webViewStyle } from "@/lib/webStyles";
+import { authApi } from "@/api/auth";
 
 export default function Login() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const twoCol = width >= 900;
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [err, setErr] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  function submit() {
-    if (username.trim() === ENV.ADMIN_USERNAME && password === ENV.ADMIN_PASSWORD) {
-      session.login();
+  async function submit() {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const tokens = await authApi.login(email.trim(), password);
+      session.setTokens(tokens);
+      const me = await authApi.me();
+      if (!me.roles.includes("ADMIN")) {
+        session.clear();
+        setErr("Your account does not have admin access.");
+        return;
+      }
       setErr("");
       router.replace("/dashboard");
-    } else {
+    } catch {
+      session.clear();
       setErr("Invalid credentials.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -84,7 +97,7 @@ export default function Login() {
               }}
             >
               Moderate requests, manage netas & karyakartas, audit OTPs, transcripts, payments and
-              reports — all from one console.
+              reports - all from one console.
             </Text>
           </View>
           <Text style={{ color: COLORS.cream + "B3", fontSize: 13 }}>Internal only</Text>
@@ -138,14 +151,15 @@ export default function Login() {
             Enter your admin credentials to continue.
           </Text>
 
-          <Text style={labelStyle}>Username</Text>
+          <Text style={labelStyle}>Email</Text>
           <TextInput
-            value={username}
-            onChangeText={setUsername}
-            placeholder="admin-username"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="admin@example.com"
             placeholderTextColor={COLORS.text3}
             autoCapitalize="none"
             autoCorrect={false}
+            inputMode="email"
             style={inputStyle}
           />
 
@@ -200,7 +214,7 @@ export default function Login() {
 
           <View style={{ marginTop: 24 }}>
             <Button
-              label="Sign in"
+              label={submitting ? "Signing in..." : "Sign in"}
               variant="primary"
               full
               onPress={submit}

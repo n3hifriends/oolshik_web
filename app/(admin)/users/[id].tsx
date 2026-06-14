@@ -35,23 +35,26 @@ export default function UserDetail() {
     return <PageHeader title="Loading user…" onBack={() => router.push("/users")} />;
   }
 
+  const emailVerified = user.emailVerified ?? user.verified ?? false;
+  const preferredLanguage = user.preferredLanguage ?? "—";
+  const updatedAt = user.updatedAt ?? user.lastActiveAt ?? user.joinedAt;
   const dirty = JSON.stringify([...roles].sort()) !== JSON.stringify([...user.roles].sort());
   const profileFields: UserField[] = [
-    { label: "Phone", value: user.phoneNumber, mono: true },
+    { label: "Phone", value: user.phoneNumber ?? "—", mono: true },
     { label: "Email", value: user.email ?? "—" },
-    { label: "Area", value: user.area },
     {
-      label: "Phone verified",
+      label: "Email verified",
       value: (
-        <Pill tone={user.verified ? "green" : "amber"}>
-          {user.verified ? "Verified" : "Unverified"}
+        <Pill tone={emailVerified ? "green" : "amber"}>
+          {emailVerified ? "Verified" : "Unverified"}
         </Pill>
       ),
     },
+    { label: "Language", value: preferredLanguage },
     { label: "Requests made", value: String(user.requestsMade), mono: true },
     { label: "Jobs done", value: String(user.jobsDone), mono: true },
     { label: "Joined", value: fmtDate(user.joinedAt) },
-    { label: "Last active", value: timeAgo(user.lastActiveAt) },
+    { label: "Updated", value: timeAgo(updatedAt) },
   ];
 
   function toggleRole(r: Role) {
@@ -65,7 +68,9 @@ export default function UserDetail() {
       label: "Request",
       flex: 2,
       render: (r) => (
-        <Text style={{ fontWeight: "600", color: COLORS.text, fontSize: 13.5 }}>{r.title}</Text>
+        <Text numberOfLines={2} style={{ fontWeight: "600", color: COLORS.text, fontSize: 13.5 }}>
+          {r.title}
+        </Text>
       ),
     },
     {
@@ -97,7 +102,7 @@ export default function UserDetail() {
       flex: 1.2,
       render: (o) => (
         <Text style={{ fontFamily: "JetBrains Mono", fontSize: 12.5, color: COLORS.text }}>
-          {o.purpose}
+          {o.action}
         </Text>
       ),
     },
@@ -113,7 +118,7 @@ export default function UserDetail() {
       label: "When",
       flex: 1,
       render: (o) => (
-        <Text style={{ color: COLORS.text2, fontSize: 13 }}>{timeAgo(o.attemptedAt)}</Text>
+        <Text style={{ color: COLORS.text2, fontSize: 13 }}>{timeAgo(o.createdAt)}</Text>
       ),
     },
   ];
@@ -129,8 +134,8 @@ export default function UserDetail() {
         }
         onBack={() => router.push("/users")}
         actions={
-          <Pill tone={user.status === "ACTIVE" ? "green" : "red"} dot>
-            {user.status === "ACTIVE" ? "Active" : "Suspended"}
+          <Pill tone={user.roles.includes("ADMIN") ? "amber" : "green"} dot>
+            {user.roles.includes("ADMIN") ? "Admin account" : "Active account"}
           </Pill>
         }
       />
@@ -145,10 +150,9 @@ export default function UserDetail() {
                 <Text style={{ fontSize: 18, fontWeight: "700", color: COLORS.text }}>
                   {user.displayName}
                 </Text>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 }}>
-                  <Icon name="star" size={13} filled color={COLORS.st.amber} />
-                  <Text style={{ fontSize: 13, color: COLORS.text2 }}>{user.rating} rating</Text>
-                </View>
+                <Text style={{ fontSize: 13, color: COLORS.text2, marginTop: 2 }}>
+                  {user.phoneNumber ?? user.email ?? "No contact on file"}
+                </Text>
               </View>
             </View>
             <View style={{ flexDirection: "row", flexWrap: "wrap", rowGap: 16 }}>
@@ -166,7 +170,12 @@ export default function UserDetail() {
           <Card padding={20}>
             <Text style={cardTitle}>Federated identities</Text>
             <View style={{ gap: 10 }}>
-              {user.identities.map((idn, i) => (
+              {(user.identities ?? []).length === 0 && (
+                <Text style={{ color: COLORS.text3, fontSize: 13 }}>
+                  No linked identity records returned by the admin API.
+                </Text>
+              )}
+              {(user.identities ?? []).map((idn, i) => (
                 <View
                   key={i}
                   style={{
@@ -311,16 +320,25 @@ const cardTitle = {
 };
 
 export function OtpStatusPill({ status }: { status: AdminOtpAuditRow["status"] }) {
-  const map = { VERIFIED: "green", EXPIRED: "gray", FAILED: "red", RATE_LIMITED: "amber" } as const;
-  const label = {
-    VERIFIED: "Verified",
-    EXPIRED: "Expired",
-    FAILED: "Failed",
-    RATE_LIMITED: "Rate-limited",
-  };
+  const normalized = status.toUpperCase();
+  const map = {
+    VERIFIED: "green",
+    SENT: "green",
+    SUCCESS: "green",
+    EXPIRED: "gray",
+    FAILED: "red",
+    ERROR: "red",
+    RATE_LIMITED: "amber",
+  } as const;
+  const tone = map[normalized as keyof typeof map] ?? "gray";
+  const label = normalized
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
   return (
-    <Pill tone={map[status]} dot={status !== "EXPIRED"}>
-      {label[status]}
+    <Pill tone={tone} dot={normalized !== "EXPIRED"}>
+      {label}
     </Pill>
   );
 }

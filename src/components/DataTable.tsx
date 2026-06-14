@@ -19,6 +19,7 @@ interface DataTableProps<T> {
   rows: T[];
   loading?: boolean;
   empty?: string;
+  minWidth?: number;
   onRowPress?: (row: T) => void;
   rowHighlight?: (row: T) => boolean;
   // server pagination (controlled)
@@ -34,6 +35,7 @@ export function DataTable<T extends { id: string }>({
   rows,
   loading,
   empty = "No records found.",
+  minWidth = 960,
   onRowPress,
   rowHighlight,
   page = 0,
@@ -63,7 +65,7 @@ export function DataTable<T extends { id: string }>({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ minWidth: "100%" }}
         >
-          <View style={{ flex: 1, minWidth: 760 }}>
+          <View style={{ flex: 1, minWidth }}>
             {/* header */}
             <View
               style={{
@@ -79,12 +81,14 @@ export function DataTable<T extends { id: string }>({
                   style={{
                     flex: c.flex ?? (c.width ? undefined : 1),
                     width: c.width,
+                    minWidth: 0,
                     paddingVertical: 11,
                     paddingHorizontal: 16,
                     alignItems: justify(c.align),
                   }}
                 >
                   <Text
+                    numberOfLines={1}
                     style={{
                       fontSize: 11,
                       fontWeight: "700",
@@ -121,6 +125,7 @@ export function DataTable<T extends { id: string }>({
                   onHoverOut={() => setHoverRow(null)}
                   style={{
                     flexDirection: "row",
+                    minHeight: 70,
                     backgroundColor: bg,
                     borderBottomWidth: ri === rows.length - 1 ? 0 : 1,
                     borderBottomColor: COLORS.lineSoft,
@@ -132,6 +137,8 @@ export function DataTable<T extends { id: string }>({
                       style={{
                         flex: c.flex ?? (c.width ? undefined : 1),
                         width: c.width,
+                        minWidth: 0,
+                        overflow: "hidden",
                         paddingVertical: 13,
                         paddingHorizontal: 16,
                         alignItems: justify(c.align),

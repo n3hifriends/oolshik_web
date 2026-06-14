@@ -56,12 +56,12 @@ export interface StatsResponse {
 export interface AdminUserSummary {
   id: string;
   displayName: string;
-  phoneNumber: string;
+  phoneNumber: string | null;
   email: string | null;
   roles: Role[];
-  area: string;
-  rating: number;
-  status: "ACTIVE" | "SUSPENDED";
+  area?: string;
+  rating?: number;
+  status?: "ACTIVE" | "SUSPENDED";
   joinedAt: string; // ISO OffsetDateTime
 }
 
@@ -71,11 +71,15 @@ export interface FederatedIdentity {
 }
 
 export interface AdminUserDetail extends AdminUserSummary {
-  verified: boolean;
+  emailVerified?: boolean;
+  languages?: string | null;
+  preferredLanguage?: string;
+  updatedAt?: string;
   requestsMade: number;
   jobsDone: number;
-  lastActiveAt: string;
-  identities: FederatedIdentity[];
+  verified?: boolean;
+  lastActiveAt?: string;
+  identities?: FederatedIdentity[];
 }
 
 // ---- Help requests ----
@@ -88,12 +92,12 @@ export interface AdminRequestSummary {
   id: string;
   title: string;
   status: HelpRequestStatus;
-  requester: { id: string; displayName: string; phoneNumber: string };
-  helper: { id: string; displayName: string; phoneNumber: string } | null;
-  area: string;
-  geo: GeoPoint;
+  requester: { id: string; displayName: string; phoneNumber: string | null };
+  helper: { id: string; displayName: string; phoneNumber: string | null } | null;
+  area?: string;
+  geo: GeoPoint | null;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
 }
 
 export interface RequestEvent {
@@ -105,7 +109,7 @@ export interface RequestEvent {
 
 export interface RequestCandidate {
   user: { id: string; displayName: string };
-  rating: number;
+  rating?: number;
   distanceM: number;
   acceptedAt: string | null;
 }
@@ -125,12 +129,16 @@ export interface AdminRequestDetail extends AdminRequestSummary {
 // ---- OTP audit ----
 export interface AdminOtpAuditRow {
   id: string;
-  phoneNumber: string; // backend may pre-mask
-  purpose: string;
+  maskedPhone: string;
   provider: string;
-  status: "VERIFIED" | "EXPIRED" | "FAILED" | "RATE_LIMITED";
-  attempts: number;
-  attemptedAt: string;
+  action: string;
+  status: string;
+  detail: string | null;
+  createdAt: string;
+  phoneNumber?: string | null;
+  purpose?: string;
+  attempts?: number;
+  attemptedAt?: string;
 }
 
 // ---- Transcription ----
@@ -166,11 +174,11 @@ export interface AdminPaymentRow {
 // ---- Reports ----
 export interface AdminReportRow {
   id: string;
-  reporter: { id: string; displayName: string; phoneNumber: string };
+  reporter: { id: string; displayName: string; phoneNumber: string | null };
   targetType: "USER" | "REQUEST";
   targetId: string;
   reason: string;
-  status: "OPEN" | "REVIEWING" | "RESOLVED" | "DISMISSED";
+  status?: "OPEN" | "REVIEWING" | "RESOLVED" | "DISMISSED";
   reportedAt: string;
 }
 
@@ -178,10 +186,14 @@ export interface AdminReportRow {
 export interface AdminNotificationRow {
   id: string;
   event: string;
-  channel: "PUSH" | "SMS";
-  recipient: { id: string; displayName: string; phoneNumber: string };
-  status: "SENT" | "PENDING" | "RETRYING" | "FAILED";
+  aggregateId?: string | null;
+  channel?: "PUSH" | "SMS";
+  recipient?: { id: string; displayName: string; phoneNumber: string | null };
+  status: string;
   attempts: number;
-  maxAttempts: number;
-  lastAttemptAt: string;
+  maxAttempts?: number;
+  lastError?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  lastAttemptAt?: string;
 }

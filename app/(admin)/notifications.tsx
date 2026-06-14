@@ -6,7 +6,7 @@ import { useNotifications } from "@/hooks/useAdmin";
 import { PageHeader, FilterBar } from "@/components/PageHeader";
 import { Select } from "@/components/inputs";
 import { DataTable, Column } from "@/components/DataTable";
-import { Button, Pill, UserCell } from "@/components/ui";
+import { Button, Pill } from "@/components/ui";
 import type { AdminNotificationRow } from "@/api/types";
 
 const PAGE_SIZE = 12;
@@ -17,15 +17,16 @@ export default function NotificationsScreen() {
   const { data, isFetching } = useNotifications({ page, size: PAGE_SIZE, status });
 
   const rows: AdminNotificationRow[] = data?.content ?? [];
-  const failed = rows.filter((n) => n.status === "FAILED").length;
+  const failed = rows.filter((n) => ["FAILED", "DEAD"].includes(n.status)).length;
 
   const columns: Column<AdminNotificationRow>[] = [
     {
       key: "event",
       label: "Event",
-      flex: 1.4,
+      flex: 1.5,
       render: (n) => (
         <Text
+          numberOfLines={1}
           style={{
             fontFamily: "JetBrains Mono",
             fontSize: 12.5,
@@ -38,16 +39,17 @@ export default function NotificationsScreen() {
       ),
     },
     {
-      key: "channel",
-      label: "Channel",
-      flex: 0.8,
-      render: (n) => <Pill tone={n.channel === "PUSH" ? "violet" : "blue"}>{n.channel}</Pill>,
-    },
-    {
-      key: "recipient",
-      label: "Recipient",
-      flex: 1.4,
-      render: (n) => <UserCell name={n.recipient.displayName} sub={n.recipient.phoneNumber} />,
+      key: "aggregate",
+      label: "Aggregate",
+      flex: 1.3,
+      render: (n) => (
+        <Text
+          numberOfLines={1}
+          style={{ fontFamily: "JetBrains Mono", color: COLORS.text3, fontSize: 12 }}
+        >
+          {n.aggregateId ?? "—"}
+        </Text>
+      ),
     },
     {
       key: "attempts",
@@ -55,7 +57,8 @@ export default function NotificationsScreen() {
       flex: 0.8,
       align: "center",
       render: (n) => {
-        const perm = n.attempts >= n.maxAttempts;
+        const maxAttempts = n.maxAttempts;
+        const perm = n.status === "DEAD" || (maxAttempts !== undefined && n.attempts >= maxAttempts);
         return (
           <Text
             style={{
@@ -65,7 +68,7 @@ export default function NotificationsScreen() {
               fontSize: 13.5,
             }}
           >
-            {n.attempts} / {n.maxAttempts}
+            {maxAttempts === undefined ? n.attempts : `${n.attempts} / ${maxAttempts}`}
           </Text>
         );
       },
@@ -77,11 +80,23 @@ export default function NotificationsScreen() {
       render: (n) => <NotiStatusPill status={n.status} />,
     },
     {
-      key: "at",
-      label: "Last attempt",
-      flex: 1.2,
+      key: "lastError",
+      label: "Last error",
+      flex: 1.5,
       render: (n) => (
-        <Text style={{ color: COLORS.text2, fontSize: 13 }}>{fmtDate(n.lastAttemptAt, true)}</Text>
+        <Text numberOfLines={1} style={{ color: n.lastError ? COLORS.st.red : COLORS.text3, fontSize: 13 }}>
+          {n.lastError ?? "—"}
+        </Text>
+      ),
+    },
+    {
+      key: "updated",
+      label: "Updated",
+      flex: 1.1,
+      render: (n) => (
+        <Text style={{ color: COLORS.text2, fontSize: 13 }}>
+          {fmtDate(n.updatedAt ?? n.lastAttemptAt ?? n.createdAt ?? "", true)}
+        </Text>
       ),
     },
   ];
@@ -111,6 +126,7 @@ export default function NotificationsScreen() {
             { value: "PENDING", label: "Pending" },
             { value: "RETRYING", label: "Retrying" },
             { value: "FAILED", label: "Failed" },
+            { value: "DEAD", label: "Dead" },
           ]}
         />
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -125,7 +141,7 @@ export default function NotificationsScreen() {
             }}
           />
           <Text style={{ fontSize: 13, color: COLORS.text3 }}>
-            Rows at max attempts are highlighted as permanent failures.
+            Failed and dead messages are highlighted for operational review.
           </Text>
         </View>
       </FilterBar>
@@ -133,7 +149,9 @@ export default function NotificationsScreen() {
         columns={columns}
         rows={rows}
         loading={isFetching}
-        rowHighlight={(n) => n.attempts >= n.maxAttempts}
+        empty="No notification records match these filters."
+        minWidth={1060}
+        rowHighlight={(n) => n.status === "DEAD" || n.status === "FAILED"}
         page={page}
         pageSize={PAGE_SIZE}
         totalElements={data?.totalElements ?? 0}
@@ -145,11 +163,22 @@ export default function NotificationsScreen() {
 }
 
 function NotiStatusPill({ status }: { status: AdminNotificationRow["status"] }) {
-  const map = { SENT: "green", PENDING: "amber", RETRYING: "blue", FAILED: "red" } as const;
-  const label = { SENT: "Sent", PENDING: "Pending", RETRYING: "Retrying", FAILED: "Failed" };
+  const normalized = status.toUpperCase();
+  const map = {
+    SENT: "green",
+    PENDING: "amber",
+    RETRYING: "blue",
+    FAILED: "red",
+    DEAD: "red",
+  } as const;
+  const label = normalized
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
   return (
-    <Pill tone={map[status]} dot>
-      {label[status]}
+    <Pill tone={map[normalized as keyof typeof map] ?? "gray"} dot>
+      {label}
     </Pill>
   );
 }
