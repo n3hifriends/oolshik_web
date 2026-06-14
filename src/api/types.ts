@@ -152,6 +152,7 @@ export interface AdminTranscriptionRow {
   durationSec: number;
   transcript: string | null;
   error: string | null;
+  audioUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 }

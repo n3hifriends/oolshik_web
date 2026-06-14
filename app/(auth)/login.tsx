@@ -15,13 +15,25 @@ import { Icon } from "@/components/Icon";
 import { Button } from "@/components/ui";
 import { webTextStyle, webViewStyle } from "@/lib/webStyles";
 import { authApi } from "@/api/auth";
+import { ENV } from "@/lib/env";
+
+function shouldPrefillDevCredentials() {
+  if (ENV.APP_ENV === "production" || typeof window === "undefined") {
+    return false;
+  }
+  return (
+    ["localhost", "127.0.0.1"].includes(window.location.hostname) &&
+    Boolean(ENV.DEV_ADMIN_EMAIL && ENV.DEV_ADMIN_PASSWORD)
+  );
+}
 
 export default function Login() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const twoCol = width >= 900;
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const devCredentialsEnabled = shouldPrefillDevCredentials();
+  const [email, setEmail] = useState(devCredentialsEnabled ? ENV.DEV_ADMIN_EMAIL : "");
+  const [password, setPassword] = useState(devCredentialsEnabled ? ENV.DEV_ADMIN_PASSWORD : "");
   const [show, setShow] = useState(false);
   const [err, setErr] = useState("");
   const [submitting, setSubmitting] = useState(false);

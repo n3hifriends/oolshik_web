@@ -16,6 +16,28 @@ type LiveRequestDetail = AdminRequestDetail & {
   offerCurrency?: string | null;
 };
 
+function isValidGeo(geo: AdminRequestDetail["geo"]) {
+  return Boolean(
+    geo &&
+      Number.isFinite(geo.lat) &&
+      Number.isFinite(geo.lng) &&
+      geo.lat >= -90 &&
+      geo.lat <= 90 &&
+      geo.lng >= -180 &&
+      geo.lng <= 180
+  );
+}
+
+function formatCoordinate(value: number) {
+  return value.toFixed(5);
+}
+
+function formatRadius(radiusM: number) {
+  if (!Number.isFinite(radiusM) || radiusM <= 0) return "Unavailable";
+  if (radiusM >= 1000) return `${(radiusM / 1000).toFixed(radiusM % 1000 === 0 ? 0 : 1)} km`;
+  return `${Math.round(radiusM)} m`;
+}
+
 export default function RequestDetail() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -30,9 +52,10 @@ export default function RequestDetail() {
   const candidates = req.candidates ?? [];
   const events = req.events ?? [];
   const reward = req.rewardInr ?? req.offerAmount;
+  const locationAvailable = isValidGeo(req.geo);
   const requestFields: RequestField[] = [
     { label: "Reward", value: reward ? inr(reward) : "Free help" },
-    { label: "Radius", value: `${req.radiusM} m`, mono: true },
+    { label: "Radius", value: formatRadius(req.radiusM), mono: true },
     { label: "Candidates", value: String(candidates.length), mono: true },
     { label: "Area", value: req.area ?? "Not available" },
     { label: "Created", value: fmtDate(req.createdAt, true) },
@@ -98,31 +121,13 @@ export default function RequestDetail() {
             )}
           </Card>
 
-          {req.geo && (
-            <Card padding={0} style={{ overflow: "hidden" }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: 16,
-                  borderBottomWidth: 1,
-                  borderBottomColor: COLORS.line,
-                }}
-              >
-                <Text style={{ fontSize: 15, fontWeight: "700", color: COLORS.text }}>
-                  Location & service radius
-                </Text>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                  <Icon name="pin" size={13} color={COLORS.orange} />
-                  <Text style={{ fontFamily: "JetBrains Mono", fontSize: 12, color: COLORS.text2 }}>
-                    {req.geo.lat}, {req.geo.lng}
-                  </Text>
-                </View>
-              </View>
-              <RequestMap geo={req.geo} radiusM={req.radiusM} />
-            </Card>
-          )}
+          <LocationServiceSection
+            geo={req.geo}
+            radiusM={req.radiusM}
+            area={req.area}
+            compact={!twoCol}
+            locationAvailable={locationAvailable}
+          />
 
           {/* audio + transcript */}
           <Card padding={20}>
@@ -288,6 +293,134 @@ const partyBox = {
   borderRadius: 10,
   padding: 12,
 };
+
+function LocationServiceSection({
+  geo,
+  radiusM,
+  area,
+  compact,
+  locationAvailable,
+}: {
+  geo: AdminRequestDetail["geo"];
+  radiusM: number;
+  area?: string;
+  compact: boolean;
+  locationAvailable: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  const coordinateText = locationAvailable && geo ? `${formatCoordinate(geo.lat)}, ${formatCoordinate(geo.lng)}` : "";
+  const googleMapsUrl = locationAvailable && geo ? `https://www.google.com/maps?q=${geo.lat},${geo.lng}` : "";
+  const osmUrl = locationAvailable && geo ? `https://www.openstreetmap.org/?mlat=${geo.lat}&mlon=${geo.lng}#map=16/${geo.lat}/${geo.lng}` : "";
+
+  async function copyCoordinates() {
+    if (!coordinateText || typeof navigator === "undefined" || !navigator.clipboard) return;
+    await navigator.clipboard.writeText(coordinateText);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  }
+
+  function openUrl(url: string) {
+    if (!url || typeof window === "undefined") return;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  return (
+    <Card padding={0} style={{ overflow: "hidden" }}>
+      <View
+        style={{
+          padding: 16,
+          borderBottomWidth: 1,
+          borderBottomColor: COLORS.line,
+          gap: 14,
+        }}
+      >
+        <View
+          style={{
+            flexDirection: compact ? "column" : "row",
+            justifyContent: "space-between",
+            alignItems: compact ? "flex-start" : "center",
+            gap: 10,
+          }}
+        >
+          <View style={{ minWidth: 0 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: COLORS.text }}>
+                Location & Service Area
+              </Text>
+              <Pill tone={locationAvailable ? "green" : "amber"} dot>
+                {locationAvailable ? "Pinned" : "Not pinned"}
+              </Pill>
+            </View>
+            <Text style={{ marginTop: 4, color: COLORS.text3, fontSize: 12.5 }}>
+              Area: {area ?? "Area not available"}
+            </Text>
+          </View>
+          {locationAvailable && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <Icon name="pin" size={13} color={COLORS.orange} />
+              <Text style={{ fontFamily: "JetBrains Mono", fontSize: 12, color: COLORS.text2 }}>
+                {coordinateText}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          <Field label="Service radius" mono>
+            {formatRadius(radiusM)}
+          </Field>
+          {locationAvailable ? (
+            <>
+              <Button
+                label={copied ? "Copied" : "Copy coordinates"}
+                icon={copied ? "check" : "pin"}
+                size="sm"
+                variant="default"
+                onPress={copyCoordinates}
+              />
+              <Button
+                label="Google Maps"
+                icon="external"
+                size="sm"
+                variant="default"
+                onPress={() => openUrl(googleMapsUrl)}
+              />
+              <Button
+                label="OpenStreetMap"
+                icon="external"
+                size="sm"
+                variant="ghost"
+                onPress={() => openUrl(osmUrl)}
+              />
+            </>
+          ) : (
+            <Text style={{ color: COLORS.text3, fontSize: 13.5, alignSelf: "center" }}>
+              No location was captured for this request.
+            </Text>
+          )}
+        </View>
+      </View>
+
+      {locationAvailable && geo ? (
+        <RequestMap geo={geo} radiusM={radiusM} height={compact ? 280 : 360} />
+      ) : (
+        <View
+          style={{
+            height: compact ? 220 : 280,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: COLORS.surface2,
+            padding: 20,
+          }}
+        >
+          <Text style={{ color: COLORS.text3, fontSize: 14, textAlign: "center" }}>
+            Location details will appear here when the mobile app captures coordinates.
+          </Text>
+        </View>
+      )}
+    </Card>
+  );
+}
 
 function AudioPlayer({ transcript }: { transcript: string | null }) {
   const [playing, setPlaying] = useState(false);

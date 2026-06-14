@@ -1,4 +1,5 @@
 import "../global.css";
+import "leaflet/dist/leaflet.css";
 import React from "react";
 import { Stack } from "expo-router";
 import { QueryClientProvider } from "@tanstack/react-query";
