@@ -16,6 +16,8 @@ const TITLES: Record<AdminRoute, string> = {
   "/payments": "Payments",
   "/reports": "Reports",
   "/notifications": "Notifications",
+  "/send-notification": "Send Notification",
+  "/broadcasts": "Broadcast History",
 };
 
 const TOP_LEVEL_ROUTES: readonly AdminRoute[] = [
@@ -27,6 +29,8 @@ const TOP_LEVEL_ROUTES: readonly AdminRoute[] = [
   "/payments",
   "/reports",
   "/notifications",
+  "/send-notification",
+  "/broadcasts",
 ];
 const TOP_LEVEL_ROUTE_SET = new Set<string>(TOP_LEVEL_ROUTES);
 

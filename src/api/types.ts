@@ -157,6 +157,11 @@ export interface AdminTranscriptionRow {
   updatedAt: string;
 }
 
+export interface RetryTranscriptionResponse {
+  retried: number;
+  totalFailed: number;
+}
+
 // ---- Payments ----
 export interface AdminPaymentRow {
   id: string;
@@ -181,6 +186,69 @@ export interface AdminReportRow {
   reason: string;
   status?: "OPEN" | "REVIEWING" | "RESOLVED" | "DISMISSED";
   reportedAt: string;
+}
+
+// ---- Admin broadcasts ----
+export type BroadcastChannel = "PUSH" | "SMS" | "IN_APP";
+export type BroadcastStatus = "QUEUED" | "PROCESSING" | "COMPLETED" | "PARTIAL_FAILURE";
+export type TargetType = "ALL" | "ROLE" | "USER" | "REQUEST";
+
+export interface SendBroadcastRequest {
+  targetType: TargetType;
+  targetValue?: string;
+  channels: BroadcastChannel[];
+  title: string;
+  body: string;
+  templateId?: string;
+  saveAsTemplate?: boolean;
+  templateName?: string;
+}
+
+export interface SendBroadcastResponse {
+  broadcastId: string;
+  status: string;
+  estimatedRecipients: number;
+}
+
+export interface BroadcastSummary {
+  id: string;
+  targetType: TargetType;
+  targetValue: string | null;
+  channels: string;
+  status: BroadcastStatus;
+  totalRecipients: number;
+  pushSent: number;
+  pushFailed: number;
+  smsSent: number;
+  smsFailed: number;
+  inAppCreated: number;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface BroadcastDetail extends BroadcastSummary {
+  title: string;
+  body: string;
+  createdBy: string | null;
+  processingStartedAt: string | null;
+}
+
+export interface BroadcastDeliveryRow {
+  id: string;
+  userId: string;
+  channel: BroadcastChannel;
+  status: "SENT" | "FAILED" | "SKIPPED";
+  error: string | null;
+  sentAt: string;
+}
+
+export interface TemplateResponse {
+  id: string;
+  name: string;
+  title: string;
+  body: string;
+  createdBy: string | null;
+  createdAt: string;
 }
 
 // ---- Notification outbox ----

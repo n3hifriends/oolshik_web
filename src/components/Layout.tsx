@@ -13,7 +13,9 @@ export type AdminRoute =
   | "/transcription"
   | "/payments"
   | "/reports"
-  | "/notifications";
+  | "/notifications"
+  | "/send-notification"
+  | "/broadcasts";
 type NavLink = { type?: undefined; name: string; label: string; icon: string; route: AdminRoute };
 type NavDivider = { type: "divider"; label: string };
 type NavEntry = NavLink | NavDivider;
@@ -27,7 +29,10 @@ const NAV: NavEntry[] = [
   { name: "transcription", label: "Transcription", icon: "mic", route: "/transcription" },
   { name: "payments", label: "Payments", icon: "payments", route: "/payments" },
   { name: "reports", label: "Reports", icon: "reports", route: "/reports" },
-  { name: "notifications", label: "Notifications", icon: "bell", route: "/notifications" },
+  { type: "divider", label: "Notifications" },
+  { name: "send-notification", label: "Send Notification", icon: "bell", route: "/send-notification" },
+  { name: "broadcasts", label: "Broadcast History", icon: "bell", route: "/broadcasts" },
+  { name: "notifications", label: "System Outbox", icon: "bell", route: "/notifications" },
 ];
 
 export function Sidebar({ onLogout }: { onLogout: () => void }) {

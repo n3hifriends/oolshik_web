@@ -4,7 +4,7 @@
 // ============================================================
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminApi, type RequestListParams, type UserListParams } from "@/api/admin";
-import type { PageParams, Role } from "@/api/types";
+import type { PageParams, Role, SendBroadcastRequest } from "@/api/types";
 
 export const qk = {
   stats: ["stats"] as const,
@@ -19,6 +19,10 @@ export const qk = {
   payments: (p: PageParams & { status?: string; mode?: string }) => ["payments", p] as const,
   reports: (p: PageParams & { status?: string }) => ["reports", p] as const,
   notifications: (p: PageParams & { status?: string }) => ["notifications", p] as const,
+  broadcasts: (p: PageParams) => ["broadcasts", p] as const,
+  broadcast: (id: string) => ["broadcast", id] as const,
+  broadcastDeliveries: (id: string, p: PageParams) => ["broadcastDeliveries", id, p] as const,
+  templates: ["templates"] as const,
 };
 
 export const useStats = () => useQuery({ queryKey: qk.stats, queryFn: adminApi.getStats });
@@ -83,6 +87,17 @@ export const useTranscription = (p: PageParams & { status?: string }) =>
     placeholderData: keepPreviousData,
   });
 
+export function useRetryFailedTranscriptions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: adminApi.retryFailedTranscriptions,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["transcription"] });
+      qc.invalidateQueries({ queryKey: qk.stats });
+    },
+  });
+}
+
 export const usePayments = (p: PageParams & { status?: string; mode?: string }) =>
   useQuery({
     queryKey: qk.payments(p),
@@ -103,3 +118,48 @@ export const useNotifications = (p: PageParams & { status?: string }) =>
     queryFn: () => adminApi.getNotifications(p),
     placeholderData: keepPreviousData,
   });
+
+export const useBroadcasts = (p: PageParams) =>
+  useQuery({
+    queryKey: qk.broadcasts(p),
+    queryFn: () => adminApi.getBroadcasts(p),
+    placeholderData: keepPreviousData,
+  });
+
+export const useBroadcast = (id: string) =>
+  useQuery({
+    queryKey: qk.broadcast(id),
+    queryFn: () => adminApi.getBroadcast(id),
+    enabled: !!id,
+  });
+
+export const useBroadcastDeliveries = (id: string, p: PageParams) =>
+  useQuery({
+    queryKey: qk.broadcastDeliveries(id, p),
+    queryFn: () => adminApi.getBroadcastDeliveries(id, p),
+    placeholderData: keepPreviousData,
+    enabled: !!id,
+  });
+
+export const useTemplates = () =>
+  useQuery({ queryKey: qk.templates, queryFn: adminApi.getTemplates });
+
+export function useSendBroadcast() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: SendBroadcastRequest) => adminApi.sendBroadcast(req),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["broadcasts"] });
+    },
+  });
+}
+
+export function useDeleteTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi.deleteTemplate(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.templates });
+    },
+  });
+}

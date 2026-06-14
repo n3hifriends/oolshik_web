@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { COLORS, tint, tintBorder } from "@/theme/tokens";
 import { fmtDate } from "@/lib/format";
-import { useTranscription } from "@/hooks/useAdmin";
+import { useRetryFailedTranscriptions, useTranscription } from "@/hooks/useAdmin";
 import { PageHeader, FilterBar } from "@/components/PageHeader";
 import { Select } from "@/components/inputs";
 import { DataTable, Column } from "@/components/DataTable";
@@ -25,9 +25,14 @@ export default function TranscriptionScreen() {
   const [status, setStatus] = useState("ALL");
   const [page, setPage] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [retryMessage, setRetryMessage] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const { data, isFetching } = useTranscription({ page, size: PAGE_SIZE, status });
+  const { data: failedData } = useTranscription({ page: 0, size: 1, status: "FAILED" });
+  const retryFailed = useRetryFailedTranscriptions();
   const rows: AdminTranscriptionRow[] = data?.content ?? [];
   const selectedRow = rows.find((x) => x.id === expanded) ?? null;
+  const failedTotal = failedData?.totalElements ?? 0;
 
   const columns: Column<AdminTranscriptionRow>[] = [
     {
@@ -99,7 +104,22 @@ export default function TranscriptionScreen() {
     },
   ];
 
-  const failed = rows.filter((t) => t.status === "FAILED").length;
+  async function handleRetryFailed() {
+    setRetryMessage(null);
+    setRetryError(null);
+    try {
+      const result = await retryFailed.mutateAsync();
+      setRetryMessage(
+        result.retried === 0
+          ? "No failed transcription jobs to retry."
+          : `Queued ${result.retried} failed transcription ${result.retried === 1 ? "job" : "jobs"} for retry.`
+      );
+      setStatus("FAILED");
+      setPage(0);
+    } catch (error) {
+      setRetryError(error instanceof Error ? error.message : "Failed to retry transcription jobs.");
+    }
+  }
 
   return (
     <View>
@@ -107,8 +127,13 @@ export default function TranscriptionScreen() {
         title="Transcription Jobs"
         subtitle={`${data?.totalElements ?? 0} STT jobs`}
         actions={
-          failed > 0 ? (
-            <Button label="Retry all failed" icon="refresh" variant="default" />
+          failedTotal > 0 ? (
+            <Button
+              label={retryFailed.isPending ? "Retrying…" : `Retry all failed (${failedTotal})`}
+              icon="refresh"
+              variant="default"
+              onPress={retryFailed.isPending ? undefined : handleRetryFailed}
+            />
           ) : undefined
         }
       />
@@ -130,6 +155,40 @@ export default function TranscriptionScreen() {
         />
         <Text style={{ fontSize: 13, color: COLORS.text3 }}>Tap a row to view details.</Text>
       </FilterBar>
+
+      {retryMessage ? (
+        <View
+          style={{
+            backgroundColor: tint("green"),
+            borderColor: tintBorder("green"),
+            borderWidth: 1,
+            borderRadius: 8,
+            padding: 12,
+            marginBottom: 12,
+          }}
+        >
+          <Text style={{ color: COLORS.st.green, fontSize: 13.5, fontWeight: "600" }}>
+            {retryMessage}
+          </Text>
+        </View>
+      ) : null}
+
+      {retryError ? (
+        <View
+          style={{
+            backgroundColor: tint("red"),
+            borderColor: tintBorder("red"),
+            borderWidth: 1,
+            borderRadius: 8,
+            padding: 12,
+            marginBottom: 12,
+          }}
+        >
+          <Text style={{ color: COLORS.st.red, fontSize: 13.5, fontWeight: "600" }}>
+            {retryError}
+          </Text>
+        </View>
+      ) : null}
 
       {selectedRow && <SttDetailPanel t={selectedRow} onClose={() => setExpanded(null)} />}
 

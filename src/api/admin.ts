@@ -12,10 +12,17 @@ import type {
   AdminTranscriptionRow,
   AdminUserDetail,
   AdminUserSummary,
+  BroadcastDeliveryRow,
+  BroadcastDetail,
+  BroadcastSummary,
   Page,
   PageParams,
   Role,
+  RetryTranscriptionResponse,
+  SendBroadcastRequest,
+  SendBroadcastResponse,
   StatsResponse,
+  TemplateResponse,
 } from "./types";
 
 // helper to build Spring-style query params
@@ -87,6 +94,10 @@ export const adminApi = {
     const { data } = await apiClient.get("/api/admin/transcription-jobs", { params: qp(p) });
     return data;
   },
+  async retryFailedTranscriptions(): Promise<RetryTranscriptionResponse> {
+    const { data } = await apiClient.post("/api/admin/transcription-jobs/retry-failed");
+    return data;
+  },
   async getPayments(
     p: PageParams & { status?: string; mode?: string }
   ): Promise<Page<AdminPaymentRow>> {
@@ -100,5 +111,38 @@ export const adminApi = {
   async getNotifications(p: PageParams & { status?: string }): Promise<Page<AdminNotificationRow>> {
     const { data } = await apiClient.get("/api/admin/notifications", { params: qp(p) });
     return data;
+  },
+
+  // ---- admin broadcasts ----
+  async sendBroadcast(req: SendBroadcastRequest): Promise<SendBroadcastResponse> {
+    const { data } = await apiClient.post("/api/admin/notifications/send", req);
+    return data;
+  },
+  async getBroadcasts(p: PageParams): Promise<Page<BroadcastSummary>> {
+    const { data } = await apiClient.get("/api/admin/notifications/broadcasts", { params: qp(p) });
+    return data;
+  },
+  async getBroadcast(id: string): Promise<BroadcastDetail> {
+    const { data } = await apiClient.get(`/api/admin/notifications/broadcasts/${id}`);
+    return data;
+  },
+  async getBroadcastDeliveries(id: string, p: PageParams): Promise<Page<BroadcastDeliveryRow>> {
+    const { data } = await apiClient.get(`/api/admin/notifications/broadcasts/${id}/deliveries`, {
+      params: qp(p),
+    });
+    return data;
+  },
+
+  // ---- templates ----
+  async getTemplates(): Promise<TemplateResponse[]> {
+    const { data } = await apiClient.get("/api/admin/notifications/templates");
+    return data;
+  },
+  async createTemplate(req: { name: string; title: string; body: string }): Promise<TemplateResponse> {
+    const { data } = await apiClient.post("/api/admin/notifications/templates", req);
+    return data;
+  },
+  async deleteTemplate(id: string): Promise<void> {
+    await apiClient.delete(`/api/admin/notifications/templates/${id}`);
   },
 };
