@@ -5,7 +5,9 @@ import { apiClient } from "./client";
 import type {
   AdminNotificationRow,
   AdminOtpAuditRow,
+  AdminPaymentDetail,
   AdminPaymentRow,
+  AdminReportDetail,
   AdminReportRow,
   AdminRequestDetail,
   AdminRequestSummary,
@@ -42,6 +44,11 @@ export interface UserListParams extends PageParams {
 export interface RequestListParams extends PageParams {
   statuses?: string[];
   days?: number;
+}
+export interface ReportListParams extends PageParams {
+  status?: string;
+  reason?: string;
+  targetType?: string;
 }
 
 export const adminApi = {
@@ -104,8 +111,34 @@ export const adminApi = {
     const { data } = await apiClient.get("/api/admin/payments", { params: qp(p) });
     return data;
   },
-  async getReports(p: PageParams & { status?: string }): Promise<Page<AdminReportRow>> {
+  async getPaymentDetail(id: string): Promise<AdminPaymentDetail | null> {
+    const { data } = await apiClient.get(`/api/admin/payments/${id}`);
+    return data;
+  },
+  async getReports(p: ReportListParams): Promise<Page<AdminReportRow>> {
     const { data } = await apiClient.get("/api/admin/reports", { params: qp(p) });
+    return data;
+  },
+  async getReport(id: string): Promise<AdminReportDetail | null> {
+    const { data } = await apiClient.get(`/api/admin/reports/${id}`);
+    return data;
+  },
+  async updateReportStatus(
+    id: string,
+    body: { status: AdminReportRow["status"]; note?: string }
+  ): Promise<AdminReportDetail> {
+    const { data } = await apiClient.patch(`/api/admin/reports/${id}/status`, body);
+    return data;
+  },
+  async assignReport(id: string, adminUserId?: string): Promise<AdminReportDetail> {
+    const { data } = await apiClient.patch(`/api/admin/reports/${id}/assign`, { adminUserId });
+    return data;
+  },
+  async addReportAction(
+    id: string,
+    body: { action: string; note?: string }
+  ): Promise<AdminReportDetail> {
+    const { data } = await apiClient.post(`/api/admin/reports/${id}/actions`, body);
     return data;
   },
   async getNotifications(p: PageParams & { status?: string }): Promise<Page<AdminNotificationRow>> {

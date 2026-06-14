@@ -173,25 +173,81 @@ export interface AdminPaymentRow {
   mode: PaymentMode;
   // Matches backend PaymentRequest.java status column.
   status: PaymentStatus;
-  ref: string;
+  ref: string | null;
   createdAt: string;
+}
+
+export interface AdminPaymentUserRef {
+  id: string;
+  displayName: string;
+  phoneNumber: string | null;
+}
+
+export interface AdminPaymentDetail {
+  id: string;
+  taskId: string;
+  payerRole: PaymentPayerRole | null;
+  mode: PaymentMode | null;
+  amountInr: number | null;
+  currency: string;
+  status: PaymentStatus;
+  ref: string | null;
+  payeeVpa: string | null;
+  payeeName: string | null;
+  note: string | null;
+  format: string | null;
+  payerUser: AdminPaymentUserRef | null;
+  requesterUser: AdminPaymentUserRef | null;
+  helperUser: AdminPaymentUserRef | null;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string | null;
 }
 
 // ---- Reports ----
 export interface AdminReportRow {
   id: string;
   reporter: { id: string; displayName: string; phoneNumber: string | null };
+  targetUser: { id: string; displayName: string; phoneNumber: string | null } | null;
   targetType: "USER" | "REQUEST";
   targetId: string;
   reason: string;
+  details: string | null;
   status?: "OPEN" | "REVIEWING" | "RESOLVED" | "DISMISSED";
+  priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  assignedAdmin: { id: string; displayName: string; phoneNumber: string | null } | null;
+  targetTitle: string | null;
+  targetStatus: string | null;
   reportedAt: string;
+  updatedAt: string;
+}
+
+export interface AdminReportActionRow {
+  id: string;
+  admin: { id: string; displayName: string; phoneNumber: string | null } | null;
+  action: string;
+  fromStatus: string | null;
+  toStatus: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface AdminReportDetail extends AdminReportRow {
+  resolutionNote: string | null;
+  resolvedAt: string | null;
+  actions: AdminReportActionRow[];
 }
 
 // ---- Admin broadcasts ----
 export type BroadcastChannel = "PUSH" | "SMS" | "IN_APP";
 export type BroadcastStatus = "QUEUED" | "PROCESSING" | "COMPLETED" | "PARTIAL_FAILURE";
 export type TargetType = "ALL" | "ROLE" | "USER" | "REQUEST";
+
+/**
+ * Mobile screen opened when the user taps a push notification from this broadcast.
+ * Matches the NotifRoute union in pushNotifications.ts on the mobile side.
+ */
+export type AdminBroadcastRouteKey = "InAppInbox" | "AdminBroadcast" | "TaskDetail";
 
 export interface SendBroadcastRequest {
   targetType: TargetType;
@@ -202,6 +258,10 @@ export interface SendBroadcastRequest {
   templateId?: string;
   saveAsTemplate?: boolean;
   templateName?: string;
+  /** Mobile screen to open on notification tap. Defaults to InAppInbox when omitted. */
+  routeKey?: AdminBroadcastRouteKey;
+  /** Entity ID required by the chosen route (e.g. task UUID for TaskDetail). */
+  routeTargetId?: string;
 }
 
 export interface SendBroadcastResponse {

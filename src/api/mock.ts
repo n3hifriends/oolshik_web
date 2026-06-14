@@ -390,14 +390,22 @@ const reports: AdminReportRow[] = Array.from({ length: 34 }, (_, i) => {
   const onReq = rng() > 0.5;
   const r = rng();
   const target = onReq ? pick(requests) : pick(users);
+  const status = r < 0.45 ? "OPEN" : r < 0.7 ? "REVIEWING" : r < 0.9 ? "RESOLVED" : "DISMISSED";
   return {
     id: "rep_" + (4000 + i).toString(36),
     reporter: lite(reporter),
+    targetUser: onReq ? null : lite(target as (typeof users)[number]),
     targetType: onReq ? "REQUEST" : "USER",
     targetId: target.id,
     reason: pick(REASONS),
-    status: r < 0.45 ? "OPEN" : r < 0.7 ? "REVIEWING" : r < 0.9 ? "RESOLVED" : "DISMISSED",
+    details: rng() > 0.35 ? "Admin review requested from the mobile report flow." : null,
+    status,
+    priority: r < 0.12 ? "CRITICAL" : r < 0.32 ? "HIGH" : r < 0.76 ? "MEDIUM" : "LOW",
+    assignedAdmin: status === "OPEN" ? null : lite(pick(users)),
+    targetTitle: onReq ? (target as (typeof requests)[number]).title : null,
+    targetStatus: onReq ? (target as (typeof requests)[number]).status : null,
     reportedAt: ago(int(0, 28) * DAY + int(0, 23) * HOUR),
+    updatedAt: ago(int(0, 10) * DAY + int(0, 23) * HOUR),
   };
 });
 

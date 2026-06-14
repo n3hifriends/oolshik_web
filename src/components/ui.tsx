@@ -92,6 +92,7 @@ export function Button({
   icon,
   full,
   style,
+  disabled,
 }: {
   label?: string;
   onPress?: () => void;
@@ -100,6 +101,7 @@ export function Button({
   icon?: string;
   full?: boolean;
   style?: ViewStyle;
+  disabled?: boolean;
 }) {
   const [hover, setHover] = useState(false);
   const palette: Record<BtnVariant, { bg: string; bgH: string; fg: string; border: string }> = {
@@ -114,9 +116,10 @@ export function Button({
     },
   };
   const p = palette[variant];
+  const fg = disabled ? COLORS.text3 : p.fg;
   return (
     <Pressable
-      onPress={onPress}
+      onPress={disabled ? undefined : onPress}
       onHoverIn={() => setHover(true)}
       onHoverOut={() => setHover(false)}
       style={{
@@ -129,14 +132,15 @@ export function Button({
         borderRadius: 9,
         borderWidth: 1,
         borderColor: p.border,
-        backgroundColor: hover ? p.bgH : p.bg,
+        backgroundColor: !disabled && hover ? p.bgH : p.bg,
+        opacity: disabled ? 0.55 : 1,
         alignSelf: full ? "stretch" : "flex-start",
         ...style,
       }}
     >
-      {icon && <Icon name={icon} size={size === "sm" ? 15 : 16} color={p.fg} />}
+      {icon && <Icon name={icon} size={size === "sm" ? 15 : 16} color={fg} />}
       {label && (
-        <Text style={{ color: p.fg, fontSize: size === "sm" ? 13 : 14, fontWeight: "600" }}>
+        <Text style={{ color: fg, fontSize: size === "sm" ? 13 : 14, fontWeight: "600" }}>
           {label}
         </Text>
       )}

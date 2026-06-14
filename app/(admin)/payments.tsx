@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { COLORS } from "@/theme/tokens";
 import { fmtDate, inr } from "@/lib/format";
 import { usePayments } from "@/hooks/useAdmin";
@@ -7,12 +8,24 @@ import { PageHeader, FilterBar } from "@/components/PageHeader";
 import { Select } from "@/components/inputs";
 import { DataTable, Column } from "@/components/DataTable";
 import { Pill, StatCard } from "@/components/ui";
-import { Icon } from "@/components/Icon";
-import type { AdminPaymentRow } from "@/api/types";
+import type { AdminPaymentRow, PaymentMode, PaymentPayerRole, PaymentStatus } from "@/api/types";
 
 const PAGE_SIZE = 12;
 
+const MODE_LABEL: Record<PaymentMode, string> = {
+  MERCHANT_QR: "QR scan",
+  PAY_HELPER_DIRECT: "Pay helper",
+  PAY_REQUESTER_DIRECT: "Pay requester",
+};
+
+const MODE_TONE: Record<PaymentMode, "violet" | "teal" | "blue"> = {
+  MERCHANT_QR: "violet",
+  PAY_HELPER_DIRECT: "teal",
+  PAY_REQUESTER_DIRECT: "blue",
+};
+
 export default function PaymentsScreen() {
+  const router = useRouter();
   const [status, setStatus] = useState("ALL");
   const [mode, setMode] = useState("ALL");
   const [page, setPage] = useState(0);
@@ -21,7 +34,7 @@ export default function PaymentsScreen() {
   const rows: AdminPaymentRow[] = data?.content ?? [];
   const paidMarked = rows
     .filter((p) => p.status === "PAID_MARKED")
-    .reduce((s, p) => s + p.amountInr, 0);
+    .reduce((s, p) => s + (p.amountInr ?? 0), 0);
   const disputedCount = rows.filter((p) => p.status === "DISPUTED").length;
   const cancelledCount = rows.filter((p) => p.status === "CANCELLED").length;
 
@@ -39,31 +52,36 @@ export default function PaymentsScreen() {
             fontSize: 13,
           }}
         >
-          {p.id}
+          {p.id.slice(0, 8)}…
         </Text>
       ),
     },
     {
       key: "requestId",
-      label: "Request",
-      flex: 1.1,
+      label: "Task",
+      flex: 1,
       render: (p) => (
-        <Text style={{ fontFamily: "JetBrains Mono", fontSize: 12.5, color: COLORS.text2 }}>
-          {p.requestId}
-        </Text>
+        <Pressable
+          onPress={() => router.push({ pathname: "/requests/[id]", params: { id: p.requestId } })}
+        >
+          <Text
+            style={{
+              fontFamily: "JetBrains Mono",
+              fontSize: 12.5,
+              color: COLORS.orange,
+              textDecorationLine: "underline",
+            }}
+          >
+            {p.requestId.slice(0, 8)}…
+          </Text>
+        </Pressable>
       ),
     },
     {
       key: "flow",
       label: "Flow",
-      flex: 1.3,
-      render: () => (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <Pill tone="blue">Neta</Pill>
-          <Icon name="chevR" size={13} color={COLORS.text3} />
-          <Pill tone="green">Karyakarta</Pill>
-        </View>
-      ),
+      flex: 1.2,
+      render: (p) => <FlowCell payerRole={p.payerRole} />,
     },
     {
       key: "amount",
@@ -79,11 +97,18 @@ export default function PaymentsScreen() {
             fontSize: 13.5,
           }}
         >
-          {inr(p.amountInr)}
+          {p.amountInr != null ? inr(p.amountInr) : "—"}
         </Text>
       ),
     },
-    { key: "mode", label: "Mode", flex: 0.8, render: (p) => <Pill tone="violet">{p.mode}</Pill> },
+    {
+      key: "mode",
+      label: "Mode",
+      flex: 1,
+      render: (p) => (
+        <Pill tone={p.mode ? MODE_TONE[p.mode] : "gray"}>{p.mode ? MODE_LABEL[p.mode] : "—"}</Pill>
+      ),
+    },
     { key: "status", label: "Status", flex: 1, render: (p) => <PayStatusPill status={p.status} /> },
     {
       key: "ref",
@@ -91,7 +116,7 @@ export default function PaymentsScreen() {
       flex: 1,
       render: (p) => (
         <Text style={{ fontFamily: "JetBrains Mono", fontSize: 12, color: COLORS.text3 }}>
-          {p.ref}
+          {p.ref || "—"}
         </Text>
       ),
     },
@@ -114,21 +139,21 @@ export default function PaymentsScreen() {
           value={inr(paidMarked)}
           icon="payments"
           tone="green"
-          sub="Marked as paid"
+          sub="Current page only"
         />
         <StatCard
           label="Disputed (page)"
           value={disputedCount}
           icon="alert"
           tone="red"
-          sub="Need follow-up"
+          sub="Current page only"
         />
         <StatCard
           label="Cancelled (page)"
           value={cancelledCount}
           icon="close"
           tone="gray"
-          sub="Cancelled requests"
+          sub="Current page only"
         />
       </View>
       <FilterBar>
@@ -154,10 +179,10 @@ export default function PaymentsScreen() {
             setMode(v);
             setPage(0);
           }}
-          width={150}
+          width={160}
           options={[
             { value: "ALL", label: "All modes" },
-            { value: "MERCHANT_QR", label: "Merchant QR" },
+            { value: "MERCHANT_QR", label: "QR scan" },
             { value: "PAY_HELPER_DIRECT", label: "Pay helper" },
             { value: "PAY_REQUESTER_DIRECT", label: "Pay requester" },
           ]}
@@ -172,23 +197,44 @@ export default function PaymentsScreen() {
         totalElements={data?.totalElements ?? 0}
         totalPages={data?.totalPages ?? 1}
         onPageChange={setPage}
+        onRowPress={(p) => router.push({ pathname: "/payments/[id]", params: { id: p.id } })}
       />
     </View>
   );
 }
 
-function PayStatusPill({ status }: { status: AdminPaymentRow["status"] }) {
-  const map = {
+function FlowCell({ payerRole }: { payerRole: PaymentPayerRole }) {
+  if (payerRole === "REQUESTER") {
+    return (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <Pill tone="blue">Neta pays</Pill>
+        <Pill tone="green">Karyakarta</Pill>
+      </View>
+    );
+  }
+  if (payerRole === "HELPER") {
+    return (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <Pill tone="green">Karyakarta pays</Pill>
+        <Pill tone="blue">Neta</Pill>
+      </View>
+    );
+  }
+  return <Text style={{ color: COLORS.text3, fontSize: 13 }}>—</Text>;
+}
+
+function PayStatusPill({ status }: { status: PaymentStatus }) {
+  const map: Record<PaymentStatus, "amber" | "blue" | "green" | "red" | "gray"> = {
     PENDING: "amber",
     INITIATED: "blue",
     PAID_MARKED: "green",
     DISPUTED: "red",
     CANCELLED: "gray",
-  } as const;
-  const label = {
+  };
+  const label: Record<PaymentStatus, string> = {
     PENDING: "Pending",
     INITIATED: "Initiated",
-    PAID_MARKED: "Paid marked",
+    PAID_MARKED: "Paid",
     DISPUTED: "Disputed",
     CANCELLED: "Cancelled",
   };

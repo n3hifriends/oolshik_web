@@ -3,8 +3,8 @@
 // around adminApi. Components consume only these hooks.
 // ============================================================
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { adminApi, type RequestListParams, type UserListParams } from "@/api/admin";
-import type { PageParams, Role, SendBroadcastRequest } from "@/api/types";
+import { adminApi, type ReportListParams, type RequestListParams, type UserListParams } from "@/api/admin";
+import type { AdminReportRow, PageParams, Role, SendBroadcastRequest } from "@/api/types";
 
 export const qk = {
   stats: ["stats"] as const,
@@ -17,7 +17,9 @@ export const qk = {
   otpAudit: (p: PageParams & { status?: string }) => ["otpAudit", p] as const,
   transcription: (p: PageParams & { status?: string }) => ["transcription", p] as const,
   payments: (p: PageParams & { status?: string; mode?: string }) => ["payments", p] as const,
-  reports: (p: PageParams & { status?: string }) => ["reports", p] as const,
+  payment: (id: string) => ["payment", id] as const,
+  reports: (p: ReportListParams) => ["reports", p] as const,
+  report: (id: string) => ["report", id] as const,
   notifications: (p: PageParams & { status?: string }) => ["notifications", p] as const,
   broadcasts: (p: PageParams) => ["broadcasts", p] as const,
   broadcast: (id: string) => ["broadcast", id] as const,
@@ -105,12 +107,60 @@ export const usePayments = (p: PageParams & { status?: string; mode?: string }) 
     placeholderData: keepPreviousData,
   });
 
-export const useReports = (p: PageParams & { status?: string }) =>
+export const usePayment = (id: string) =>
+  useQuery({
+    queryKey: qk.payment(id),
+    queryFn: () => adminApi.getPaymentDetail(id),
+    enabled: !!id,
+  });
+
+export const useReports = (p: ReportListParams) =>
   useQuery({
     queryKey: qk.reports(p),
     queryFn: () => adminApi.getReports(p),
     placeholderData: keepPreviousData,
   });
+
+export const useReport = (id: string) =>
+  useQuery({
+    queryKey: qk.report(id),
+    queryFn: () => adminApi.getReport(id),
+    enabled: !!id,
+  });
+
+export function useUpdateReportStatus(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { status: AdminReportRow["status"]; note?: string }) =>
+      adminApi.updateReportStatus(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.report(id) });
+      qc.invalidateQueries({ queryKey: ["reports"] });
+      qc.invalidateQueries({ queryKey: qk.stats });
+    },
+  });
+}
+
+export function useAssignReport(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (adminUserId?: string) => adminApi.assignReport(id, adminUserId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.report(id) });
+      qc.invalidateQueries({ queryKey: ["reports"] });
+    },
+  });
+}
+
+export function useAddReportAction(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { action: string; note?: string }) => adminApi.addReportAction(id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.report(id) });
+    },
+  });
+}
 
 export const useNotifications = (p: PageParams & { status?: string }) =>
   useQuery({

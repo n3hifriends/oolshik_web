@@ -7,12 +7,18 @@ import { FilterChip, Select } from "@/components/inputs";
 import { PageHeader } from "@/components/PageHeader";
 import { useTemplates, useSendBroadcast } from "@/hooks/useAdmin";
 import { webTextStyle } from "@/lib/webStyles";
-import type { BroadcastChannel, TargetType, TemplateResponse } from "@/api/types";
+import type { AdminBroadcastRouteKey, BroadcastChannel, TargetType, TemplateResponse } from "@/api/types";
 
 const CHANNELS: { value: BroadcastChannel; label: string; icon: string }[] = [
   { value: "PUSH", label: "Push", icon: "🔔" },
   { value: "SMS", label: "SMS", icon: "💬" },
   { value: "IN_APP", label: "In-App", icon: "📥" },
+];
+
+const ROUTE_OPTIONS: { value: AdminBroadcastRouteKey; label: string; description: string }[] = [
+  { value: "InAppInbox", label: "📥  Notification inbox", description: "Opens the user's in-app notification inbox." },
+  { value: "TaskDetail", label: "📋  Task detail", description: "Opens a specific task. Requires a task UUID below." },
+  { value: "AdminBroadcast", label: "📣  Broadcast (inbox)", description: "Opens the inbox, same as notification inbox." },
 ];
 
 const TARGET_OPTIONS = [
@@ -41,6 +47,8 @@ export default function SendNotificationScreen() {
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState("NONE");
+  const [routeKey, setRouteKey] = useState<AdminBroadcastRouteKey>("InAppInbox");
+  const [routeTargetId, setRouteTargetId] = useState("");
   const [result, setResult] = useState<{ broadcastId: string; estimatedRecipients: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,6 +90,10 @@ export default function SendNotificationScreen() {
       setError("Template name is required when saving as template.");
       return;
     }
+    if (routeKey === "TaskDetail" && !routeTargetId.trim()) {
+      setError("A task UUID is required when the tap action is Task detail.");
+      return;
+    }
 
     try {
       const res = await sendMutation.mutateAsync({
@@ -93,6 +105,8 @@ export default function SendNotificationScreen() {
         templateId: selectedTemplate !== "NONE" ? selectedTemplate : undefined,
         saveAsTemplate,
         templateName: saveAsTemplate ? templateName.trim() : undefined,
+        routeKey,
+        routeTargetId: routeKey === "TaskDetail" ? routeTargetId.trim() : undefined,
       });
       setResult({ broadcastId: res.broadcastId, estimatedRecipients: res.estimatedRecipients });
     } catch (e: any) {
@@ -130,6 +144,8 @@ export default function SendNotificationScreen() {
             setSaveAsTemplate(false);
             setTemplateName("");
             setSelectedTemplate("NONE");
+            setRouteKey("InAppInbox");
+            setRouteTargetId("");
           }}
           onHistory={() => router.push("/broadcasts")}
         />
@@ -251,6 +267,77 @@ export default function SendNotificationScreen() {
                 <Text style={{ fontSize: 12.5, color: COLORS.st.red }}>
                   Select at least one channel.
                 </Text>
+              )}
+            </View>
+          </Card>
+
+          {/* Tap action */}
+          <Card>
+            <View style={{ gap: 12 }}>
+              <Text style={{ fontSize: 14, fontWeight: "700", color: COLORS.text }}>
+                Tap action
+              </Text>
+              <Text style={{ fontSize: 12.5, color: COLORS.text3 }}>
+                Where does the user land when they tap this notification?
+              </Text>
+              <View style={{ gap: 8 }}>
+                {ROUTE_OPTIONS.map((opt) => (
+                  <Pressable
+                    key={opt.value}
+                    onPress={() => {
+                      setRouteKey(opt.value);
+                      if (opt.value !== "TaskDetail") setRouteTargetId("");
+                    }}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "flex-start",
+                      gap: 10,
+                      padding: 12,
+                      borderRadius: 10,
+                      borderWidth: 1.5,
+                      borderColor: routeKey === opt.value ? COLORS.orange : COLORS.line,
+                      backgroundColor: routeKey === opt.value ? COLORS.orange + "0D" : COLORS.canvas,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: 9,
+                        borderWidth: 2,
+                        borderColor: routeKey === opt.value ? COLORS.orange : COLORS.text3,
+                        backgroundColor: routeKey === opt.value ? COLORS.orange : "transparent",
+                        marginTop: 1,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {routeKey === opt.value && (
+                        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: "#fff" }} />
+                      )}
+                    </View>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={{ fontSize: 13.5, fontWeight: "600", color: COLORS.text }}>
+                        {opt.label}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: COLORS.text3 }}>
+                        {opt.description}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+              {routeKey === "TaskDetail" && (
+                <Field label="Task UUID">
+                  <StyledInput
+                    value={routeTargetId}
+                    onChange={setRouteTargetId}
+                    placeholder="e.g. 123e4567-e89b-12d3-a456-426614174000"
+                  />
+                  <Text style={{ fontSize: 12, color: COLORS.text3, marginTop: 4 }}>
+                    Users who tap the notification will be taken directly to this task.
+                  </Text>
+                </Field>
               )}
             </View>
           </Card>
